@@ -1,7 +1,7 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
+    { "src": "api/*.py", "use": "@vercel/python" },
     { "src": "index.html", "use": "@vercel/static" },
     { "src": "css/**", "use": "@vercel/static" },
     { "src": "js/**", "use": "@vercel/static" },
@@ -9,7 +9,8 @@
     { "src": "images/**", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/api/find", "dest": "/api/find.py" },
+    { "src": "/api/track", "dest": "/api/track.py" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
