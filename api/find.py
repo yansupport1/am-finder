@@ -243,32 +243,45 @@ def dig_detail(data):
         "bio": "",
     }
     descs = []
+    author_candidates = []  # (priority, uniqueId, nickname, avatar)
 
-    def collect(obj):
+    def collect(obj, path=""):
         if obj is None:
             return
         if isinstance(obj, list):
             for v in obj[:100]:
-                collect(v)
+                collect(v, path)
             return
         if not isinstance(obj, dict):
             return
-        if isinstance(obj.get("desc"), str):
+
+        if isinstance(obj.get("desc"), str) and len(obj["desc"]) > 0:
             descs.append(obj["desc"])
-        if isinstance(obj.get("description"), str):
+        if isinstance(obj.get("description"), str) and len(obj["description"]) > 0:
             descs.append(obj["description"])
+
         uid = obj.get("uniqueId") or obj.get("unique_id")
-        if uid:
-            out["author"] = out["author"] or str(uid)
-        if obj.get("nickname") and not out["author"]:
-            out["author"] = str(obj["nickname"])
+        nick = obj.get("nickname")
         av = obj.get("avatarLarger") or obj.get("avatarMedium") or obj.get("avatarThumb")
-        if av:
-            out["author_avatar"] = av
-        if isinstance(obj.get("signature"), str):
-            out["bio"] = out["bio"] or obj["signature"]
+        # Prefer author objects that look like the video owner (has both uniqueId + stats / verified)
+        if uid and isinstance(uid, str) and len(uid) > 1:
+            priority = 0
+            pl = path.lower()
+            if "author" in pl or "authorinfo" in pl or "userinfo" in pl:
+                priority += 10
+            if "comment" in pl or "reply" in pl:
+                priority -= 20  # avoid commenter usernames
+            if obj.get("verified") is not None or obj.get("secUid") or obj.get("sec_uid"):
+                priority += 3
+            if obj.get("signature") is not None:
+                priority += 2
+            author_candidates.append((priority, str(uid), str(nick) if nick else "", av or ""))
+
+        if isinstance(obj.get("signature"), str) and obj["signature"] and not out["bio"]:
+            # only take bio from high-priority later
+            pass
         st = obj.get("stats")
-        if isinstance(st, dict):
+        if isinstance(st, dict) and not out["stats"].get("views"):
             out["stats"] = {
                 "views": st.get("playCount") or st.get("play_count") or st.get("views"),
                 "likes": st.get("diggCount") or st.get("digg_count") or st.get("likes"),
@@ -281,10 +294,38 @@ def dig_detail(data):
         if isinstance(obj.get("text"), str) and len(obj["text"]) > 2:
             if obj.get("cid") or obj.get("aweme_id") or obj.get("comment_id"):
                 out["comments_text"].append(obj["text"])
-        for v in obj.values():
-            collect(v)
+        for k, v in obj.items():
+            collect(v, path + "." + str(k))
 
     collect(data)
+
+    if author_candidates:
+        author_candidates.sort(key=lambda x: -x[0])
+        best = author_candidates[0]
+        out["author"] = best[1]  # uniqueId = real @username
+        if best[3]:
+            out["author_avatar"] = best[3]
+        # bio from same-ish objects
+        for pr, uid, nick, av in author_candidates[:5]:
+            if pr >= 10:
+                break
+
+    # bio: search again for signature under author path
+    def find_bio(obj, path=""):
+        if out["bio"]:
+            return
+        if isinstance(obj, dict):
+            if ("author" in path.lower() or "userinfo" in path.lower()) and isinstance(obj.get("signature"), str):
+                if obj["signature"]:
+                    out["bio"] = obj["signature"]
+                    return
+            for k, v in obj.items():
+                find_bio(v, path + "." + str(k))
+        elif isinstance(obj, list):
+            for v in obj[:50]:
+                find_bio(v, path)
+    find_bio(data)
+
     if descs:
         descs.sort(key=len, reverse=True)
         out["description"] = descs[0]
@@ -326,7 +367,7 @@ def scrape_tiktok(url):
     oembed = fetch_oembed(final_url)
     if oembed:
         description = oembed.get("title") or description
-        author = oembed.get("author_name") or author
+        author = author or oembed.get("author_name") or author  # uniqueId from page wins
         author_avatar = oembed.get("thumbnail_url") or author_avatar
         cover = oembed.get("thumbnail_url") or cover
 
@@ -344,7 +385,7 @@ def scrape_tiktok(url):
         if data:
             d = dig_detail(data)
             description = d["description"] or description
-            author = d["author"] or author
+            author = d["author"] or author  # prefer uniqueId
             author_avatar = d["author_avatar"] or author_avatar
             cover = d["cover"] or cover
             play_url = d["play_url"] or play_url
@@ -372,10 +413,21 @@ def scrape_tiktok(url):
     add(extract_urls(comments_blob), "comments")
     add([u for u in extract_all_http(comments_blob) if is_preset_host(u)], "comments")
 
+    # Final author: prefer clean uniqueId (no spaces); else URL @handle; else oembed
+    url_user = parse_username(final_url)
+    if author and " " in str(author):
+        author = url_user or author
+    if not author:
+        author = url_user or author
+    if url_user and author and author.lstrip("@").lower() != url_user.lower():
+        # dig uniqueId wins if it looks like a handle (no spaces)
+        if " " in str(author):
+            author = url_user
+
     return {
         "ok": True,
         "presetLinks": preset_links,
-        "author": author or "unknown",
+        "author": (("@" + author.lstrip("@")) if author else "unknown"),
         "authorDetail": {"avatar": author_avatar} if author_avatar else {},
         "video": {
             "description": description or "",

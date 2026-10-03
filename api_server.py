@@ -351,7 +351,7 @@ async def scrape_tiktok(url: str) -> dict[str, Any]:
         oembed = await fetch_oembed(client, final_url)
         if oembed:
             description = oembed.get("title") or description
-            author = oembed.get("author_name") or author
+            author = author or oembed.get("author_name") or author  # uniqueId from page wins
             author_avatar = oembed.get("thumbnail_url") or author_avatar
             cover = oembed.get("thumbnail_url") or cover
 
@@ -373,6 +373,12 @@ async def scrape_tiktok(url: str) -> dict[str, Any]:
                 detail = dig_video_detail(data)
                 description = detail["description"] or description
                 author = detail["author"] or author
+                # Prefer @ from video URL if dig returned a display nickname
+                _u = parse_username(final_url)
+                if _u and author and (" " in author or author != _u):
+                    # if author looks like display name, use URL handle
+                    if _u.lower() != author.lower().lstrip("@"):
+                        author = _u
                 author_avatar = detail["author_avatar"] or author_avatar
                 cover = detail["cover"] or cover
                 play_url = detail["play_url"] or play_url
@@ -415,7 +421,7 @@ async def scrape_tiktok(url: str) -> dict[str, Any]:
         result = {
             "ok": True,
             "presetLinks": preset_links,
-            "author": author or "unknown",
+            "author": (("@" + author.lstrip("@")) if author else "unknown"),
             "authorDetail": {"avatar": author_avatar} if author_avatar else {},
             "video": {
                 "description": description or "",
