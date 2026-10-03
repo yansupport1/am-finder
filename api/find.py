@@ -289,8 +289,32 @@ def dig_detail(data):
             }
         vid = obj.get("video")
         if isinstance(vid, dict):
-            out["cover"] = vid.get("cover") or vid.get("originCover") or out["cover"]
-            out["play_url"] = vid.get("playAddr") or vid.get("downloadAddr") or out["play_url"]
+            out["cover"] = (
+                vid.get("cover") or vid.get("originCover") or vid.get("dynamicCover")
+                or out["cover"]
+            )
+            # play addresses — TikTok often nests UrlList
+            for key in ("playAddr", "downloadAddr", "play_addr", "download_addr", "playApi", "downloadApi"):
+                val = vid.get(key)
+                if isinstance(val, str) and val.startswith("http") and not out["play_url"]:
+                    out["play_url"] = val
+                elif isinstance(val, dict):
+                    url_list = val.get("UrlList") or val.get("url_list") or val.get("urlList") or []
+                    if url_list and isinstance(url_list, list) and not out["play_url"]:
+                        out["play_url"] = url_list[0]
+                    uri = val.get("Uri") or val.get("uri") or val.get("url")
+                    if isinstance(uri, str) and uri.startswith("http") and not out["play_url"]:
+                        out["play_url"] = uri
+            # bitrateInfo / playAddrArray
+            for bi in (vid.get("bitrateInfo") or vid.get("bit_rate") or [])[:5]:
+                if not isinstance(bi, dict):
+                    continue
+                pa = bi.get("PlayAddr") or bi.get("play_addr") or bi.get("PlayAddrStruct") or {}
+                if isinstance(pa, dict):
+                    ul = pa.get("UrlList") or pa.get("url_list") or []
+                    if ul and not out["play_url"]:
+                        out["play_url"] = ul[0]
+
         if isinstance(obj.get("text"), str) and len(obj["text"]) > 2:
             if obj.get("cid") or obj.get("aweme_id") or obj.get("comment_id"):
                 out["comments_text"].append(obj["text"])
@@ -331,6 +355,15 @@ def dig_detail(data):
         out["description"] = descs[0]
     return out
 
+
+
+def _proxy_url(media_url):
+    """Route TikTok CDN media through our proxy for playback."""
+    if not media_url or not media_url.startswith("http"):
+        return media_url or ""
+    # relative proxy path works on same origin (Vercel)
+    from urllib.parse import quote
+    return "/api/video?url=" + quote(media_url, safe="")
 
 def scrape_tiktok(url):
     preset_links = []
@@ -389,6 +422,14 @@ def scrape_tiktok(url):
             author_avatar = d["author_avatar"] or author_avatar
             cover = d["cover"] or cover
             play_url = d["play_url"] or play_url
+            if not play_url:
+                _bag2 = []
+                walk_strings(data, _bag2)
+                mp4s = re.findall(r"https?://[^\s\"\'<>]+(?:\.mp4|media[^\s\"\'<>]*)", "\n".join(_bag2))
+                mp4s = [u for u in mp4s if "tiktok" in u or "musical" in u or "byte" in u]
+                if mp4s:
+                    play_url = mp4s[0]
+
             stats = d["stats"] or stats
             bio = d["bio"] or bio
             if d["comments_text"]:
@@ -432,8 +473,8 @@ def scrape_tiktok(url):
         "video": {
             "description": description or "",
             "cover": cover or "",
-            "playUrl": play_url or "",
-            "playUrlNoWm": play_url or "",
+            "playUrl": (_proxy_url(play_url) if play_url else ""),
+            "playUrlNoWm": (_proxy_url(play_url) if play_url else ""),
             "width": 576,
             "height": 1024,
             "stats": {

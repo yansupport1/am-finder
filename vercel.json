@@ -11,6 +11,7 @@
   "routes": [
     { "src": "/api/find", "dest": "/api/find.py" },
     { "src": "/api/track", "dest": "/api/track.py" },
+    { "src": "/api/video", "dest": "/api/video.py" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
