@@ -22,18 +22,37 @@ UA = (
 )
 
 AM_PATTERNS = [
+    # Official Alight Motion share (5MB / cloud)
+    re.compile(r"https?://(?:www\.)?alightcreative\.com/am/share/[^\s\"'<>]+", re.I),
     re.compile(r"https?://(?:www\.)?alight\.link/[^\s\"'<>]+", re.I),
     re.compile(r"https?://(?:www\.)?alightmotion\.com/[^\s\"'<>]+", re.I),
     re.compile(r"https?://(?:www\.)?am\.link/[^\s\"'<>]+", re.I),
     re.compile(r"https?://link\.alightmotion\.com/[^\s\"'<>]+", re.I),
+    # Google Drive (very common for XML presets)
+    re.compile(r"https?://(?:drive|docs)\.google\.com/(?:file/d/|open\?id=|uc\?[^\s\"']*id=)[^\s\"'<>]+", re.I),
+    re.compile(r"https?://drive\.google\.com/[^\s\"'<>]+", re.I),
+    # Other common hosts used for AM presets
+    re.compile(r"https?://(?:www\.)?mediafire\.com/file/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?mega\.(?:nz|co\.nz)/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?dropbox\.com/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?pixeldrain\.com/u/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?gofile\.io/d/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?anonfiles\.com/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?workupload\.com/file/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?terabox\.com/[^\s\"'<>]+", re.I),
+    re.compile(r"https?://(?:www\.)?telegra\.ph/[^\s\"'<>]+", re.I),
+    # Shorteners (kept if context mentions preset)
+    re.compile(r"https?://(?:bit\.ly|t\.co|tinyurl\.com|cutt\.ly|s\.id|linktr\.ee|bio\.link)/[^\s\"'<>]+", re.I),
+    # Generic alight / preset path
     re.compile(r"https?://[^\s\"'<>]*alight[^\s\"'<>]*preset[^\s\"'<>]*", re.I),
     re.compile(r"https?://[^\s\"'<>]*(?:am-preset|ampreset|alight-preset)[^\s\"'<>]*", re.I),
-    re.compile(r"https?://(?:bit\.ly|t\.co|tinyurl\.com|cutt\.ly|s\.id)/[^\s\"'<>]+", re.I),
 ]
 
 PRESET_HINT = re.compile(
     r"(alight\s*motion|am\s*preset|preset\s*am|link\s*preset|preset\s*link|"
-    r"xml\s*preset|5\s*mb|5mb\s*preset|download\s*preset)",
+    r"xml\s*preset|5\s*mb|5mb\s*preset|download\s*preset|preset\s*xml|"
+    r"file\s*preset|preset\s*file|link\s*xml|drive\.google|gdrive|"
+    r"#preset|#alight|#ampreset|presetalight)",
     re.I,
 )
 
@@ -58,6 +77,29 @@ def http_get(url, timeout=18, method="GET"):
         return final, text, resp.status
 
 
+
+def extract_all_http(text):
+    """Grab any http(s) URL from text."""
+    if not text:
+        return []
+    return re.findall(r"https?://[^\s\"'<>\]\)\}]+", text)
+
+def is_preset_host(url):
+    host = ""
+    try:
+        from urllib.parse import urlparse as _up
+        host = _up(url).netloc.lower()
+    except Exception:
+        host = url.lower()
+    keys = (
+        "alightcreative.com", "alight.link", "alightmotion.com", "am.link",
+        "drive.google.com", "docs.google.com", "mediafire.com", "mega.nz",
+        "mega.co.nz", "dropbox.com", "pixeldrain.com", "gofile.io",
+        "anonfiles.com", "workupload.com", "terabox.com", "telegra.ph",
+        "bit.ly", "tinyurl.com", "cutt.ly", "s.id", "linktr.ee", "bio.link",
+    )
+    return any(k in host for k in keys)
+
 def extract_urls(text):
     if not text:
         return []
@@ -73,7 +115,12 @@ def extract_urls(text):
 
 def classify(url, context=""):
     low = (url + " " + context).lower()
-    ptype = "5mb" if ("5mb" in low or "5 mb" in low) else "xml"
+    if "alightcreative.com/am/share" in low or "/am/share/" in low:
+        ptype = "5mb"
+    elif "5mb" in low or "5 mb" in low:
+        ptype = "5mb"
+    else:
+        ptype = "xml"  # drive, mediafire, etc. usually XML
     detail = None
     c = context.lower()
     if "caption" in c or "description" in c:
@@ -124,6 +171,35 @@ def fetch_oembed(url):
         pass
     return None
 
+
+
+def fetch_comments_api(video_id, count=50):
+    """Best-effort public comment list (may fail without cookies)."""
+    if not video_id:
+        return []
+    texts = []
+    try:
+        api = (
+            "https://www.tiktok.com/api/comment/list/"
+            f"?aid=1988&aweme_id={video_id}&count={count}&cursor=0"
+        )
+        _, body, status = http_get(api, timeout=12)
+        if status != 200:
+            return texts
+        data = json.loads(body)
+        comments = data.get("comments") or data.get("comment_list") or []
+        for c in comments:
+            t = c.get("text") or c.get("share_info", {}).get("desc") or ""
+            if t:
+                texts.append(t)
+            # replies if present
+            for r in (c.get("reply_comment") or c.get("reply_list") or [])[:10]:
+                rt = r.get("text") or ""
+                if rt:
+                    texts.append(rt)
+    except Exception:
+        pass
+    return texts
 
 def extract_hydration(html):
     patterns = [
@@ -281,8 +357,20 @@ def scrape_tiktok(url):
             add(extract_urls("\n".join(bag)), "embedded data")
 
     add(extract_urls(description), "video caption / description")
+    add([u for u in extract_all_http(description) if is_preset_host(u)], "video caption / description")
     add(extract_urls(bio), "account bio")
+    add([u for u in extract_all_http(bio) if is_preset_host(u)], "account bio")
+    
+    # 6) Try TikTok comment API
+    try:
+        api_comments = fetch_comments_api(video_id, count=80)
+        if api_comments:
+            comments_blob = (comments_blob + "\n" + "\n".join(api_comments)).strip()
+    except Exception:
+        pass
+
     add(extract_urls(comments_blob), "comments")
+    add([u for u in extract_all_http(comments_blob) if is_preset_host(u)], "comments")
 
     return {
         "ok": True,
