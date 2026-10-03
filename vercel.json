@@ -12,6 +12,7 @@
     { "src": "/api/find", "dest": "/api/find.py" },
     { "src": "/api/track", "dest": "/api/track.py" },
     { "src": "/api/video", "dest": "/api/video.py" },
+    { "src": "/google9a4753a0b67cb3cb.html", "dest": "/google9a4753a0b67cb3cb.html" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
