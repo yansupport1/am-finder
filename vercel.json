@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     { "src": "api/*.py", "use": "@vercel/python" },
-    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "*.html", "use": "@vercel/static" },
     { "src": "css/**", "use": "@vercel/static" },
     { "src": "js/**", "use": "@vercel/static" },
     { "src": "fonts/**", "use": "@vercel/static" },
@@ -12,7 +12,6 @@
     { "src": "/api/find", "dest": "/api/find.py" },
     { "src": "/api/track", "dest": "/api/track.py" },
     { "src": "/api/video", "dest": "/api/video.py" },
-    { "src": "/google9a4753a0b67cb3cb.html" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
