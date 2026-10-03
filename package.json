@@ -1,0 +1,13 @@
+{
+  "name": "am-preset-finder-yanz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AM Preset Finder by Yanz — Node.js API for Vercel",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
