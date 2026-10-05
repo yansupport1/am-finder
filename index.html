@@ -12,7 +12,7 @@
 
 <div class="yanz-modal-overlay" id="yanzJoinModal" role="dialog" aria-modal="true" aria-labelledby="yanzJoinTitle">
   <div class="yanz-modal-card">
-    <div class="yanz-modal-icon">💚</div>
+    <div class="yanz-modal-icon">✨</div>
     <h2 class="yanz-modal-title" id="yanzJoinTitle">Suka dengan AM Finder?</h2>
     <p class="yanz-modal-desc">Join saluran WhatsApp biar dapat update fitur, preset tips, dan info terbaru dari Yanz.</p>
     <div class="yanz-modal-actions">
@@ -33,20 +33,16 @@
 <script>
 (function () {
   var CHANNEL = "https://whatsapp.com/channel/0029VbClbeZDJ6GujGMyQ53T";
-  var KEY_JOINED = "amfinder_yanz_joined";
-  var KEY_SEEN = "amfinder_yanz_modal_seen";
 
   function $(id) { return document.getElementById(id); }
 
   function openChannel() {
-    try { localStorage.setItem(KEY_JOINED, "1"); } catch (e) {}
     window.open(CHANNEL, "_blank", "noopener,noreferrer");
   }
 
   function hideModal() {
     var m = $("yanzJoinModal");
     if (m) m.classList.remove("is-open");
-    try { localStorage.setItem(KEY_SEEN, "1"); } catch (e) {}
   }
 
   function showModal() {
@@ -55,9 +51,6 @@
   }
 
   function showToast() {
-    try {
-      if (localStorage.getItem(KEY_JOINED) === "1") return;
-    } catch (e) {}
     var t = $("yanzToast");
     if (!t) return;
     t.classList.add("is-show");
@@ -73,15 +66,8 @@
   }
 
   function boot() {
-    var joined = false, seen = false;
-    try {
-      joined = localStorage.getItem(KEY_JOINED) === "1";
-      seen = localStorage.getItem(KEY_SEEN) === "1";
-    } catch (e) {}
-
-    if (!joined && !seen) {
-      setTimeout(showModal, 600);
-    }
+    // Always show popup every time user opens / re-enters the app
+    setTimeout(showModal, 500);
 
     var skip = $("yanzSkipBtn");
     var join = $("yanzJoinBtn");
@@ -104,20 +90,10 @@
     });
 
     // Toast every 2 minutes
-    setInterval(function () {
-      try {
-        if (localStorage.getItem(KEY_JOINED) === "1") return;
-      } catch (e) {}
-      showToast();
-    }, 2 * 60 * 1000);
+    setInterval(showToast, 2 * 60 * 1000);
 
-    // First toast after 45s if not joined
-    setTimeout(function () {
-      try {
-        if (localStorage.getItem(KEY_JOINED) === "1") return;
-      } catch (e) {}
-      if (seen || joined) showToast();
-    }, 45000);
+    // First toast after 45s
+    setTimeout(showToast, 45000);
   }
 
   if (document.readyState === "loading") {
