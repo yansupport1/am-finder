@@ -470,3 +470,103 @@ body > * { position: relative; z-index: 1; }
 @media (prefers-reduced-motion: reduce) {
   body::before, body::after, .btn-primary::before { animation: none !important; }
 }
+
+
+
+/* ===== Header = banner only (same box size) ===== */
+.site-header {
+  padding: 0 !important;
+  margin: 12px auto 16px !important;
+  max-width: 720px !important;
+  width: calc(100% - 28px) !important;
+  overflow: hidden !important;
+  display: block !important;
+  text-align: left !important;
+  min-height: 0 !important;
+}
+.site-header::before,
+.site-header::after {
+  display: none !important; /* hide corner overlays that clip banner */
+}
+.yanz-header-banner {
+  display: block;
+  width: 100%;
+  line-height: 0;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.yanz-header-banner img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 160px;
+  object-fit: cover;
+  object-position: center center;
+  border-radius: inherit;
+}
+@media (min-width: 480px) {
+  .yanz-header-banner img {
+    max-height: 180px;
+  }
+}
+@media (min-width: 720px) {
+  .yanz-header-banner img {
+    max-height: 200px;
+  }
+}
+
+/* remove old standalone top banner spacing if any leftover */
+.yanz-top-banner { display: none !important; }
+
+
+
+/* Force banner in header even after React hydration */
+.site-header .brand-row,
+.site-header .brand-tagline,
+.site-header .brand-byline,
+.site-header .hud-corner,
+.site-header .brand-mark,
+.site-header .brand-name {
+  display: none !important;
+}
+
+.site-header {
+  padding: 0 !important;
+  margin: 12px auto 16px !important;
+  max-width: 720px !important;
+  width: calc(100% - 28px) !important;
+  min-height: 120px !important;
+  background-image: url("../images/banner-am.webp") !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-color: #0a0f24 !important;
+}
+
+/* If our injected img exists, show it full */
+.site-header .yanz-header-banner {
+  display: block !important;
+  width: 100%;
+  line-height: 0;
+}
+.site-header .yanz-header-banner img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 160px;
+  object-fit: cover;
+  object-position: center;
+}
+.site-header:has(.yanz-header-banner img) {
+  background-image: none !important;
+  min-height: 0 !important;
+}
+
+@media (min-width: 480px) {
+  .site-header { min-height: 140px !important; }
+  .site-header .yanz-header-banner img { max-height: 180px; }
+}
+@media (min-width: 720px) {
+  .site-header { min-height: 160px !important; }
+  .site-header .yanz-header-banner img { max-height: 200px; }
+}
