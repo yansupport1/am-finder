@@ -606,3 +606,22 @@ html, body {
 #yanzRoot, .yanz-chrome, .yanz-tabs, .yanz-caption-panel, .yanz-caption-box {
   max-width: 100%;
 }
+
+.yanz-result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11.5px;
+  color: rgba(241, 245, 249, 0.65);
+  margin: 0 0 8px;
+}
+.yanz-result-stats span {
+  white-space: nowrap;
+}
+.yanz-loader-text {
+  animation: pulseTxt 1.2s ease-in-out infinite;
+}
+@keyframes pulseTxt {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
