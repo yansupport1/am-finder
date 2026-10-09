@@ -584,3 +584,87 @@ a, button, input, .btn-primary, .btn-open, .clear-btn,
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ===== DPI-stable layout (same look any DPI) ===== */
+html {
+  /* Prevent mobile browsers from inflating text */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Keep 1 CSS px consistent; avoid root rem DPI tricks */
+  font-size: 16px;
+}
+body {
+  /* Fixed optical size — no browser min-font scaling surprises */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Prefer fixed px over rem for key chrome so DPI/font scale doesn't reshape UI */
+.btn-primary,
+.btn-open,
+.clear-btn,
+.search-input,
+.yanz-btn,
+.yanz-toast-join {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ===== FLOA corner video (top-left, small-medium) ===== */
+.yanz-floa {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 99990;
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.055);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  backdrop-filter: blur(22px) saturate(165%);
+  box-shadow:
+    0 24px 60px -32px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  animation: floaIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.yanz-floa-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  opacity: 0.92;
+}
+@media (min-width: 480px) {
+  .yanz-floa {
+    width: 88px;
+    height: 88px;
+    top: 16px;
+    left: 16px;
+    border-radius: 18px;
+  }
+}
+@media (min-width: 768px) {
+  .yanz-floa {
+    width: 96px;
+    height: 96px;
+  }
+}
+@keyframes floaIn {
+  from {
+    opacity: 0;
+    transform: translate(-8px, -8px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yanz-floa { animation: none; }
+  .yanz-floa-video { display: none; }
+}
