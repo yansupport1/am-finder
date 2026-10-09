@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/search.py": { "maxDuration": 60 },
+    "api/find.py": { "maxDuration": 30 },
+    "api/video.py": { "maxDuration": 30 }
+  },
   "builds": [
     { "src": "api/*.py", "use": "@vercel/python" },
     { "src": "index.html", "use": "@vercel/static" },

@@ -642,3 +642,32 @@ html, body {
   font-size: 15px !important;
   letter-spacing: 0.03em;
 }
+
+.yanz-result {
+  flex-wrap: wrap;
+}
+.yanz-result-media {
+  width: 100%;
+  max-width: 120px;
+  flex-shrink: 0;
+}
+.yanz-result-video {
+  width: 100%;
+  max-width: 120px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+@media (min-width: 480px) {
+  .yanz-result-media { max-width: 140px; }
+  .yanz-result-video { max-width: 140px; height: 180px; }
+}
+.yanz-result-cover {
+  width: 100%;
+  max-width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 12px;
+}

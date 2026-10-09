@@ -282,16 +282,23 @@
         '<span>♥ ' + esc(st.likesText || st.likes || "—") + "</span>" +
         '<span>💬 ' + esc(st.commentsText || st.comments || "—") + "</span>" +
         "</div>";
-      var cover = r.cover
-        ? '<img class="yanz-result-cover" src="' + esc(r.cover) + '" alt=""/>'
-        : '<div class="yanz-result-cover"></div>';
+      var media = "";
+      if (r.playUrl) {
+        media = '<video class="yanz-result-video" src="' + esc(r.playUrl) + '" poster="' + esc(r.cover || "") +
+          '" controls playsinline preload="metadata"></video>';
+      } else if (r.cover) {
+        media = '<img class="yanz-result-cover" src="' + esc(r.cover) + '" alt=""/>';
+      } else {
+        media = '<div class="yanz-result-cover"></div>';
+      }
       var links = (r.presetLinks || []).map(function (u) {
         return '<a href="' + esc(u) + '" target="_blank" rel="noopener">Buka Preset</a>';
       }).join("");
       var open = r.videoUrl
         ? '<a class="yanz-result-open" href="' + esc(r.videoUrl) + '" target="_blank" rel="noopener">Link TikTok</a>'
         : "";
-      div.innerHTML = cover +
+      div.innerHTML =
+        '<div class="yanz-result-media">' + media + "</div>" +
         '<div class="yanz-result-body">' +
         '<div class="yanz-result-author">@' + esc(String(r.author || "unknown").replace(/^@/, "")) + "</div>" +
         '<div class="yanz-result-desc">' + esc(r.description || "") + "</div>" +

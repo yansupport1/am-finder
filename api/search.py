@@ -1,12 +1,14 @@
 """
 GET /api/search?q=<keyword>
-Own search pipeline: discover TikTok videos via public web indexes + read each video page caption/stats/presets.
+Reliable multi-source discovery + per-video caption read + playable URLs.
 """
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs, quote, unquote, urljoin
+from urllib.parse import urlparse, parse_qs, quote, unquote
 from urllib.request import Request, urlopen
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
+import time
 from html import unescape
 
 UA = (
@@ -17,6 +19,10 @@ UA_MOBILE = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
 )
+
+# simple process cache (helps 2nd same query on warm instance)
+_CACHE = {}
+_CACHE_TTL = 120  # seconds
 
 AM_PATTERNS = [
     re.compile(r"https?://(?:www\.)?alightcreative\.com/am/share/[^\s\"'<>]+", re.I),
@@ -34,22 +40,15 @@ TT_VIDEO_RE = re.compile(
     r"https?://(?:www\.)?tiktok\.com/@([\w.\-]+)/video/(\d+)",
     re.I,
 )
-TT_ANY_RE = re.compile(
-    r"https?://(?:www\.|vm\.|vt\.)?tiktok\.com/[^\s\"'<>]+",
-    re.I,
-)
 
 
-def http_get(url, ua=UA, timeout=16, headers=None):
-    h = {
+def http_get(url, ua=UA, timeout=14, referer="https://www.google.com/"):
+    req = Request(url, headers={
         "User-Agent": ua,
         "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://www.google.com/",
-    }
-    if headers:
-        h.update(headers)
-    req = Request(url, headers=h)
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+        "Referer": referer,
+    })
     with urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8", "ignore"), r.geturl()
 
@@ -90,51 +89,75 @@ def fmt_num(n):
     return str(n)
 
 
-def normalize_tt_url(url):
-    url = unescape(url).split("?")[0].split("#")[0]
+def normalize_tt(url):
+    url = unescape(url or "").split("#")[0]
     m = TT_VIDEO_RE.search(url)
     if m:
         return f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}", m.group(1), m.group(2)
-    return url, "", ""
+    return url.split("?")[0], "", ""
+
+
+def proxy_play(url):
+    if not url or not str(url).startswith("http"):
+        return url or ""
+    return "/api/video?url=" + quote(url, safe="")
 
 
 def dig_detail(obj, out, depth=0):
-    if depth > 14 or obj is None:
+    if depth > 15 or obj is None:
         return
     if isinstance(obj, list):
-        for v in obj[:80]:
+        for v in obj[:100]:
             dig_detail(v, out, depth + 1)
         return
     if not isinstance(obj, dict):
         return
 
     desc = obj.get("desc") or obj.get("description") or ""
-    if isinstance(desc, str) and desc and (obj.get("id") or obj.get("aweme_id") or obj.get("video")):
-        stats = obj.get("stats") or obj.get("statistics") or {}
-        author = obj.get("author") or obj.get("authorInfo") or {}
-        video = obj.get("video") or {}
-        if not isinstance(stats, dict):
-            stats = {}
+    video = obj.get("video")
+    author = obj.get("author") or obj.get("authorInfo")
+    stats = obj.get("stats") or obj.get("statistics")
+
+    interesting = isinstance(desc, str) and desc and (
+        obj.get("id") or obj.get("aweme_id") or isinstance(video, dict)
+    )
+
+    if interesting:
         if not isinstance(author, dict):
             author = {}
         if not isinstance(video, dict):
             video = {}
+        if not isinstance(stats, dict):
+            stats = {}
 
-        uid = author.get("uniqueId") or author.get("unique_id") or author.get("nickname") or out.get("author") or ""
-        cover = video.get("cover") or video.get("originCover") or out.get("cover") or ""
+        uid = author.get("uniqueId") or author.get("unique_id") or author.get("nickname") or ""
+        cover = video.get("cover") or video.get("originCover") or video.get("dynamicCover") or ""
         if isinstance(cover, dict):
             ul = cover.get("url_list") or cover.get("UrlList") or []
             cover = ul[0] if ul else ""
 
-        play = out.get("playUrl") or ""
-        for key in ("playAddr", "downloadAddr", "play_addr"):
+        play = ""
+        # deep play addr
+        for key in ("playAddr", "downloadAddr", "play_addr", "download_addr", "playApi"):
             val = video.get(key)
-            if isinstance(val, str) and val.startswith("http") and not play:
+            if isinstance(val, str) and val.startswith("http"):
                 play = val
-            elif isinstance(val, dict) and not play:
-                ul = val.get("UrlList") or val.get("url_list") or []
+                break
+            if isinstance(val, dict):
+                ul = val.get("UrlList") or val.get("url_list") or val.get("urlList") or []
                 if ul:
                     play = ul[0]
+                    break
+        if not play:
+            for bi in (video.get("bitrateInfo") or video.get("bit_rate") or [])[:6]:
+                if not isinstance(bi, dict):
+                    continue
+                pa = bi.get("PlayAddr") or bi.get("play_addr") or {}
+                if isinstance(pa, dict):
+                    ul = pa.get("UrlList") or pa.get("url_list") or []
+                    if ul:
+                        play = ul[0]
+                        break
 
         views = as_int(stats.get("playCount") or stats.get("play_count") or stats.get("views"))
         likes = as_int(stats.get("diggCount") or stats.get("digg_count") or stats.get("likes"))
@@ -146,19 +169,20 @@ def dig_detail(obj, out, depth=0):
         if uid:
             out["author"] = str(uid).lstrip("@")
         if cover:
-            out["cover"] = cover
+            out["cover"] = cover if isinstance(cover, str) else out.get("cover", "")
         if play:
             out["playUrl"] = play
+        st = out.setdefault("stats", {})
         if views is not None:
-            out.setdefault("stats", {})["views"] = views
+            st["views"] = views
         if likes is not None:
-            out.setdefault("stats", {})["likes"] = likes
+            st["likes"] = likes
         if comments is not None:
-            out.setdefault("stats", {})["comments"] = comments
+            st["comments"] = comments
         if shares is not None:
-            out.setdefault("stats", {})["shares"] = shares
-        vid = str(obj.get("id") or obj.get("aweme_id") or out.get("id") or "")
-        if vid:
+            st["shares"] = shares
+        vid = str(obj.get("id") or obj.get("aweme_id") or "")
+        if vid.isdigit():
             out["id"] = vid
 
     for v in obj.values():
@@ -174,17 +198,36 @@ def read_video_page(url):
         "playUrl": "",
         "videoUrl": url,
         "presetLinks": [],
-        "stats": {"views": None, "likes": None, "comments": None, "shares": None},
+        "stats": {},
     }
-    nu, author, vid = normalize_tt_url(url)
+    nu, author, vid = normalize_tt(url)
     info["videoUrl"] = nu
     info["author"] = author
     info["id"] = vid
 
+    # oembed often works for author/title
+    try:
+        oembed_url = "https://www.tiktok.com/oembed?url=" + quote(nu, safe="")
+        raw, _ = http_get(oembed_url, timeout=10, referer="https://www.tiktok.com/")
+        oe = json.loads(raw)
+        if oe.get("title") and not info["description"]:
+            info["description"] = oe["title"]
+        if oe.get("author_name") and not info["author"]:
+            info["author"] = str(oe["author_name"]).lstrip("@")
+        if oe.get("thumbnail_url"):
+            info["cover"] = oe["thumbnail_url"]
+        if oe.get("author_url"):
+            m = re.search(r"/@([\w.\-]+)", oe["author_url"])
+            if m:
+                info["author"] = m.group(1)
+    except Exception:
+        pass
+
     for ua in (UA_MOBILE, UA):
         try:
-            html, final = http_get(nu, ua=ua, timeout=15, headers={"Referer": "https://www.tiktok.com/"})
-            info["videoUrl"] = final.split("?")[0] if "tiktok.com" in final else nu
+            html, final = http_get(nu, ua=ua, timeout=14, referer="https://www.tiktok.com/")
+            if "tiktok.com" in final:
+                info["videoUrl"] = final.split("?")[0]
             for pat in (
                 r'<script id="SIGI_STATE"[^>]*>(.*?)</script>',
                 r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>',
@@ -194,142 +237,134 @@ def read_video_page(url):
                 if not m:
                     continue
                 try:
-                    data = json.loads(m.group(1))
-                    dig_detail(data, info)
+                    dig_detail(json.loads(m.group(1)), info)
                 except Exception:
                     pass
-            # meta fallbacks
             if not info["description"]:
-                om = re.search(r'<meta[^>]+property="og:description"[^>]+content="([^"]*)"', html, re.I)
+                om = re.search(r'property="og:description"\s+content="([^"]*)"', html, re.I)
+                if not om:
+                    om = re.search(r'content="([^"]*)"\s+property="og:description"', html, re.I)
                 if om:
                     info["description"] = unescape(om.group(1))
             if not info["cover"]:
-                om = re.search(r'<meta[^>]+property="og:image"[^>]+content="([^"]*)"', html, re.I)
+                om = re.search(r'property="og:image"\s+content="([^"]*)"', html, re.I)
                 if om:
                     info["cover"] = unescape(om.group(1))
-            if not info["author"]:
-                um = re.search(r"tiktok\.com/@([\w.\-]+)", info["videoUrl"])
-                if um:
-                    info["author"] = um.group(1)
-            info["presetLinks"] = extract_preset_links(info.get("description") or "")
-            # also scan whole html for preset links near caption
-            extra = extract_preset_links(html)
-            for u in extra:
-                if u not in info["presetLinks"]:
-                    info["presetLinks"].append(u)
-            if info["description"] or info["presetLinks"] or info["stats"].get("views") is not None:
+            # any mp4 in page as last resort play
+            if not info.get("playUrl"):
+                mp4s = re.findall(r"https?://[^\"'\s]+(?:tiktokcdn|musical\.ly|byte)[^\"'\s]+\.mp4[^\"'\s]*", html)
+                if mp4s:
+                    info["playUrl"] = mp4s[0].encode().decode("unicode_escape", "ignore") if "\\u" in mp4s[0] else mp4s[0]
+            links = extract_preset_links(info.get("description") or "")
+            links += [x for x in extract_preset_links(html) if x not in links]
+            info["presetLinks"] = links[:8]
+            if info.get("description") or info.get("playUrl") or info.get("stats"):
                 break
         except Exception:
             continue
 
+    if info.get("author") and info.get("id") and not info.get("videoUrl"):
+        info["videoUrl"] = f"https://www.tiktok.com/@{info['author']}/video/{info['id']}"
     return info
 
 
-def discover_via_duckduckgo(query):
-    """Discover TikTok video URLs using DuckDuckGo HTML results."""
-    urls = []
-    seen = set()
+def _add_url(bucket, seen, url):
+    nu, a, v = normalize_tt(url)
+    key = v or nu
+    if not key or key in seen:
+        return
+    if "tiktok.com" not in nu:
+        return
+    seen.add(key)
+    bucket.append(nu)
+
+
+def discover(query):
+    urls, seen = [], set()
     variants = [
-        f'site:tiktok.com/video {query} preset',
+        f'site:tiktok.com/video {query}',
+        f'site:tiktok.com {query} preset',
         f'site:tiktok.com {query} #preset',
-        f'site:tiktok.com {query} alight preset',
         f'{query} #preset site:tiktok.com',
+        f'{query} alight motion preset tiktok',
     ]
-    for q in variants[:3]:
+
+    # DuckDuckGo
+    for q in variants[:4]:
         try:
-            # DuckDuckGo html
-            ddg = f"https://html.duckduckgo.com/html/?q={quote(q)}"
-            html, _ = http_get(ddg, timeout=14, headers={"Referer": "https://duckduckgo.com/"})
-            # results often as uddg= encoded
+            html, _ = http_get(
+                f"https://html.duckduckgo.com/html/?q={quote(q)}",
+                timeout=12,
+                referer="https://duckduckgo.com/",
+            )
             for m in re.finditer(r"uddg=([^&\"']+)", html):
                 try:
-                    from urllib.parse import unquote as uq
-                    link = uq(m.group(1))
+                    link = unquote(m.group(1))
                 except Exception:
                     continue
-                if "tiktok.com" not in link:
-                    continue
-                nu, a, v = normalize_tt_url(link)
-                if v and v not in seen:
-                    seen.add(v)
-                    urls.append(nu)
-                elif "tiktok.com" in link and link not in seen:
-                    seen.add(link)
-                    urls.append(link.split("?")[0])
+                _add_url(urls, seen, link)
             for m in TT_VIDEO_RE.finditer(html):
-                nu = f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}"
-                if m.group(2) not in seen:
-                    seen.add(m.group(2))
-                    urls.append(nu)
+                _add_url(urls, seen, m.group(0))
         except Exception:
-            continue
-        if len(urls) >= 10:
+            pass
+        if len(urls) >= 15:
             break
-    return urls[:12]
 
-
-def discover_via_bing(query):
-    urls = []
-    seen = set()
-    variants = [
-        f'site:tiktok.com {query} preset',
-        f'site:tiktok.com/video {query} #preset',
-    ]
-    for q in variants[:2]:
+    # Bing
+    for q in variants[:3]:
         try:
-            page = f"https://www.bing.com/search?q={quote(q)}&count=20"
-            html, _ = http_get(page, timeout=14, headers={"Referer": "https://www.bing.com/"})
+            html, _ = http_get(
+                f"https://www.bing.com/search?q={quote(q)}&count=20",
+                timeout=12,
+                referer="https://www.bing.com/",
+            )
             for m in TT_VIDEO_RE.finditer(html):
-                nu = f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}"
-                if m.group(2) not in seen:
-                    seen.add(m.group(2))
-                    urls.append(nu)
-            for m in re.finditer(r'href="(https?://(?:www\.)?tiktok\.com/@[^"]+/video/\d+)', html):
-                nu, a, v = normalize_tt_url(m.group(1))
-                if v and v not in seen:
-                    seen.add(v)
-                    urls.append(nu)
+                _add_url(urls, seen, m.group(0))
+            for m in re.finditer(r'href="(https?://(?:www\.)?tiktok\.com/@[^"]+/video/\d+[^"]*)"', html):
+                _add_url(urls, seen, m.group(1))
         except Exception:
-            continue
-        if len(urls) >= 10:
+            pass
+        if len(urls) >= 18:
             break
-    return urls[:12]
 
-
-def discover_via_tiktok_pages(query):
-    """Best-effort TikTok search pages as extra source."""
-    urls = []
-    seen = set()
+    # TikTok search pages
     for kw in (f"{query} #preset", f"{query} preset", query):
         for path in (
             f"https://www.tiktok.com/search/video?q={quote(kw)}",
             f"https://www.tiktok.com/search?q={quote(kw)}",
         ):
             try:
-                html, _ = http_get(path, ua=UA_MOBILE, timeout=14, headers={"Referer": "https://www.tiktok.com/"})
+                html, _ = http_get(path, ua=UA_MOBILE, timeout=12, referer="https://www.tiktok.com/")
                 for m in TT_VIDEO_RE.finditer(html):
-                    nu = f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}"
-                    if m.group(2) not in seen:
-                        seen.add(m.group(2))
-                        urls.append(nu)
-                # json blobs may contain ids
-                for m in re.finditer(r'"video"\s*:\s*\{[^}]*?"id"\s*:\s*"(\d+)"', html):
-                    pass
-                for m in re.finditer(r'"id"\s*:\s*"(\d{15,})".{0,200}?"uniqueId"\s*:\s*"([^"]+)"', html, re.S):
-                    vid, uid = m.group(1), m.group(2)
-                    if vid not in seen:
-                        seen.add(vid)
-                        urls.append(f"https://www.tiktok.com/@{uid}/video/{vid}")
-                for m in re.finditer(r'"uniqueId"\s*:\s*"([^"]+)".{0,200}?"id"\s*:\s*"(\d{15,})"', html, re.S):
-                    uid, vid = m.group(1), m.group(2)
-                    if vid not in seen:
-                        seen.add(vid)
-                        urls.append(f"https://www.tiktok.com/@{uid}/video/{vid}")
+                    _add_url(urls, seen, m.group(0))
+                for m in re.finditer(r'"uniqueId"\s*:\s*"([^"]+)".{0,240}?"id"\s*:\s*"(\d{10,})"', html, re.S):
+                    _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}")
+                for m in re.finditer(r'"id"\s*:\s*"(\d{10,})".{0,240}?"uniqueId"\s*:\s*"([^"]+)"', html, re.S):
+                    _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(2)}/video/{m.group(1)}")
             except Exception:
-                continue
-        if len(urls) >= 8:
+                pass
+        if len(urls) >= 20:
             break
-    return urls[:12]
+
+    return urls[:20]
+
+
+def caption_matches(desc, query):
+    d = (desc or "").lower()
+    q = (query or "").lower().strip()
+    if not q:
+        return False
+    if q in d:
+        return True
+    tokens = [t for t in re.split(r"\s+", q) if t]
+    if not tokens:
+        return False
+    # all tokens present (order-independent) = strong match
+    if all(t in d for t in tokens):
+        return True
+    # majority tokens
+    hit = sum(1 for t in tokens if t in d)
+    return hit >= max(1, len(tokens) - 1) if len(tokens) > 2 else hit == len(tokens)
 
 
 def search_own(query):
@@ -337,84 +372,80 @@ def search_own(query):
     if not q:
         return []
 
-    # 1) Discover candidate TikTok video URLs from multiple sources
-    candidates = []
-    seen = set()
-    for finder in (discover_via_duckduckgo, discover_via_bing, discover_via_tiktok_pages):
-        try:
-            for u in finder(q):
-                nu, a, v = normalize_tt_url(u)
-                key = v or nu
-                if key in seen:
-                    continue
-                seen.add(key)
-                candidates.append(nu)
-        except Exception:
-            continue
-        if len(candidates) >= 12:
-            break
+    key = q.lower()
+    now = time.time()
+    if key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
+        return _CACHE[key][1]
 
-    candidates = candidates[:10]
+    candidates = discover(q)
     if not candidates:
+        _CACHE[key] = (now, [])
         return []
 
-    # 2) Read each video page for real caption + stats + preset links
     results = []
-    ql = q.lower()
-    tokens = [t for t in re.split(r"\s+", ql) if t]
+    # parallel read for speed + reliability
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futs = {ex.submit(read_video_page, u): u for u in candidates}
+        for fut in as_completed(futs):
+            try:
+                info = fut.result()
+            except Exception:
+                continue
+            desc = info.get("description") or ""
+            matched = caption_matches(desc, q)
+            has_preset = bool(info.get("presetLinks"))
+            # keep if caption matches query OR has preset links from discovery
+            if not matched and not has_preset:
+                # still keep if author/title thin but url discovered with query words in page later — skip weak
+                continue
+            if not matched and has_preset:
+                # only keep preset if at least one token in caption
+                tokens = [t for t in re.split(r"\s+", q.lower()) if t]
+                if tokens and not any(t in desc.lower() for t in tokens):
+                    continue
 
-    for url in candidates:
-        try:
-            info = read_video_page(url)
-        except Exception:
-            continue
-        desc = (info.get("description") or "").lower()
-        # relevance filter soft: keep if keyword matches OR has preset OR #preset
-        rel = 0
-        if info.get("presetLinks"):
-            rel += 50
-        if "#preset" in desc:
-            rel += 25
-        if "preset" in desc:
-            rel += 10
-        for t in tokens:
-            if t and t in desc:
-                rel += 15
-        if rel < 10 and not info.get("presetLinks"):
-            # still keep some results if discovery was strong but caption thin
-            rel = 5
-        info["_score"] = rel
-        results.append(info)
+            st = info.get("stats") or {}
+            results.append({
+                "id": info.get("id") or "",
+                "description": desc,
+                "author": info.get("author") or "",
+                "cover": info.get("cover") or "",
+                "playUrl": proxy_play(info.get("playUrl") or ""),
+                "videoUrl": info.get("videoUrl") or "",
+                "presetLinks": info.get("presetLinks") or [],
+                "stats": {
+                    "views": st.get("views"),
+                    "likes": st.get("likes"),
+                    "comments": st.get("comments"),
+                    "shares": st.get("shares"),
+                    "viewsText": fmt_num(st.get("views")),
+                    "likesText": fmt_num(st.get("likes")),
+                    "commentsText": fmt_num(st.get("comments")),
+                },
+                "_match": matched,
+            })
 
-    results.sort(key=lambda x: x.get("_score", 0), reverse=True)
-
-    # Prefer items with actual preset links first, then high relevance
-    final = []
-    for r in results:
-        r.pop("_score", None)
+    # sort: caption match + preset first
+    def score(r):
+        s = 0
+        if r.get("_match"):
+            s += 100
+        if r.get("presetLinks"):
+            s += 50
+        if r.get("playUrl"):
+            s += 20
         st = r.get("stats") or {}
-        pu = r.get("playUrl") or ""
-        if pu.startswith("http"):
-            pu = "/api/video?url=" + quote(pu, safe="")
-        final.append({
-            "id": r.get("id") or "",
-            "description": r.get("description") or "",
-            "author": r.get("author") or "",
-            "cover": r.get("cover") or "",
-            "playUrl": pu,
-            "videoUrl": r.get("videoUrl") or "",
-            "presetLinks": r.get("presetLinks") or [],
-            "stats": {
-                "views": st.get("views"),
-                "likes": st.get("likes"),
-                "comments": st.get("comments"),
-                "shares": st.get("shares"),
-                "viewsText": fmt_num(st.get("views")),
-                "likesText": fmt_num(st.get("likes")),
-                "commentsText": fmt_num(st.get("comments")),
-            },
-        })
-    return final[:10]
+        if st.get("views"):
+            s += min(int(st["views"]) // 10000, 30)
+        return s
+
+    results.sort(key=score, reverse=True)
+    for r in results:
+        r.pop("_match", None)
+
+    out = results[:15]
+    _CACHE[key] = (now, out)
+    return out
 
 
 class handler(BaseHTTPRequestHandler):
@@ -432,7 +463,7 @@ class handler(BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         q = unquote((qs.get("q") or qs.get("query") or [""])[0]).strip()
         if not q:
-            body = json.dumps({"ok": False, "error": "missing q", "results": []}).encode()
+            body = json.dumps({"ok": False, "results": [], "message": "missing q"}).encode()
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
