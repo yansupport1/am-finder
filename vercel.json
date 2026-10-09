@@ -3,7 +3,8 @@
   "functions": {
     "api/search.py": { "maxDuration": 60 },
     "api/find.py": { "maxDuration": 30 },
-    "api/video.py": { "maxDuration": 30 }
+    "api/video.py": { "maxDuration": 30 },
+    "api/time.py": { "maxDuration": 10 }
   },
   "builds": [
     { "src": "api/*.py", "use": "@vercel/python" },
@@ -19,6 +20,7 @@
     { "src": "/api/track", "dest": "/api/track.py" },
     { "src": "/api/video", "dest": "/api/video.py" },
     { "src": "/api/search", "dest": "/api/search.py" },
+    { "src": "/api/time", "dest": "/api/time.py" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }

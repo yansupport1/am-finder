@@ -285,8 +285,11 @@ def discover(query):
         f'site:tiktok.com/video {query}',
         f'site:tiktok.com {query} preset',
         f'site:tiktok.com {query} #preset',
+        f'site:tiktok.com {query} preset am',
+        f'site:tiktok.com {query} preset alight',
         f'{query} #preset site:tiktok.com',
-        f'{query} alight motion preset tiktok',
+        f'{query} preset alight motion tiktok',
+        f'{query} "preset" tiktok',
     ]
 
     # DuckDuckGo
@@ -328,7 +331,7 @@ def discover(query):
             break
 
     # TikTok search pages
-    for kw in (f"{query} #preset", f"{query} preset", query):
+    for kw in (f"{query} #preset", f"{query} preset", f"{query} preset am", f"{query} alight", query):
         for path in (
             f"https://www.tiktok.com/search/video?q={quote(kw)}",
             f"https://www.tiktok.com/search?q={quote(kw)}",
@@ -352,19 +355,20 @@ def discover(query):
 def caption_matches(desc, query):
     d = (desc or "").lower()
     q = (query or "").lower().strip()
-    if not q:
+    if not q or not d:
         return False
     if q in d:
         return True
     tokens = [t for t in re.split(r"\s+", q) if t]
     if not tokens:
         return False
-    # all tokens present (order-independent) = strong match
+    # any meaningful token (>=2 chars) in caption counts
+    if any(t in d for t in tokens if len(t) >= 2):
+        return True
     if all(t in d for t in tokens):
         return True
-    # majority tokens
     hit = sum(1 for t in tokens if t in d)
-    return hit >= max(1, len(tokens) - 1) if len(tokens) > 2 else hit == len(tokens)
+    return hit >= max(1, (len(tokens) + 1) // 2)
 
 
 def search_own(query):
@@ -394,14 +398,14 @@ def search_own(query):
             desc = info.get("description") or ""
             matched = caption_matches(desc, q)
             has_preset = bool(info.get("presetLinks"))
-            # keep if caption matches query OR has preset links from discovery
-            if not matched and not has_preset:
-                # still keep if author/title thin but url discovered with query words in page later — skip weak
-                continue
-            if not matched and has_preset:
-                # only keep preset if at least one token in caption
-                tokens = [t for t in re.split(r"\s+", q.lower()) if t]
-                if tokens and not any(t in desc.lower() for t in tokens):
+            # Semua kata boleh dicari: utamakan cocok caption
+            tokens = [t for t in re.split(r"\s+", q.lower()) if t]
+            any_token = any(t in desc.lower() for t in tokens) if tokens else False
+            if not matched and not any_token and not has_preset:
+                # keep item if description empty but we have id (rare) — still skip noise
+                if not (info.get("id") and info.get("author")):
+                    continue
+                if not any_token and not matched:
                     continue
 
             st = info.get("stats") or {}
@@ -463,7 +467,7 @@ class handler(BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         q = unquote((qs.get("q") or qs.get("query") or [""])[0]).strip()
         if not q:
-            body = json.dumps({"ok": False, "results": [], "message": "missing q"}).encode()
+            body = json.dumps({"ok": False, "results": [], "message": "kata kunci kosong"}).encode()
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -477,7 +481,7 @@ class handler(BaseHTTPRequestHandler):
                 "query": q,
                 "count": len(results),
                 "results": results,
-                "message": None if results else "yah gada preset nya",
+                "message": None if results else "Yah, tidak ada preset-nya",
             }, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -491,7 +495,7 @@ class handler(BaseHTTPRequestHandler):
                 "query": q,
                 "count": 0,
                 "results": [],
-                "message": "yah gada preset nya",
+                "message": "Yah, tidak ada preset-nya",
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

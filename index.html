@@ -151,14 +151,14 @@
       '<div class="yanz-modal-card">' +
       '<div class="yanz-modal-icon">✨</div>' +
       '<h2 class="yanz-modal-title">Suka dengan AM Finder?</h2>' +
-      '<p class="yanz-modal-desc">Join saluran WhatsApp biar dapat update fitur dan info terbaru dari Yanz.</p>' +
+      '<p class="yanz-modal-desc">Gabung saluran WhatsApp supaya dapat update fitur dan info terbaru dari Yanz.</p>' +
       '<div class="yanz-modal-actions">' +
       '<button type="button" class="yanz-btn yanz-btn-skip" id="yanzSkipBtn">Lewati</button>' +
-      '<button type="button" class="yanz-btn yanz-btn-join" id="yanzJoinBtn">Join</button>' +
+      '<button type="button" class="yanz-btn yanz-btn-join" id="yanzJoinBtn">Gabung</button>' +
       '</div></div></div>' +
       '<div class="yanz-toast-wrap"><div class="yanz-toast" id="yanzToast">' +
-      '<div class="yanz-toast-text">Join <strong>saluran WA</strong> biar dapat update ✨</div>' +
-      '<button type="button" class="yanz-toast-join" id="yanzToastJoin">Join</button>' +
+      '<div class="yanz-toast-text">Gabung <strong>saluran WA</strong> biar dapat update ✨</div>' +
+      '<button type="button" class="yanz-toast-join" id="yanzToastJoin">Gabung</button>' +
       '<button type="button" class="yanz-toast-close" id="yanzToastClose">×</button>' +
       '</div></div>';
     document.body.appendChild(wrap);
@@ -202,27 +202,27 @@
           '<div class="yanz-loader-scan"></div>' +
           '<div class="yanz-loader-ring"></div>' +
         '</div>' +
-        '<div class="yanz-loader-text">Memuat AM Preset Finder…</div>' +
+        '<div class="yanz-loader-text">Sedang memuat AM Preset Finder…</div>' +
       '</div>' +
       '<div class="yanz-chrome" id="yanzChrome">' +
         '<div class="yanz-tabs" id="yanzTabs">' +
-          '<button type="button" class="yanz-tab is-active" id="yanzTabUrl">Preset Finder / URL Video</button>' +
-          '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari Preset Di TikTok</button>' +
+          '<button type="button" class="yanz-tab is-active" id="yanzTabUrl">Cari via Link Video</button>' +
+          '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari via Caption TikTok</button>' +
         '</div>' +
         '<div class="yanz-caption-panel" id="yanzCaptionPanel">' +
           '<div class="yanz-caption-box">' +
-            '<h2 class="yanz-caption-title">Cari Preset via Caption</h2>' +
-            '<p class="yanz-caption-hint">Contoh: <b>Negoro angin</b> — cari video yang caption-nya cocok + #preset.</p>' +
+            '<h2 class="yanz-caption-title">Cari preset dari caption TikTok</h2>' +
+            '<p class="yanz-caption-hint">Ketik kata di caption video, contoh: <b>Negoro angin</b>. Sistem akan mencari video TikTok yang caption-nya mengandung kata itu.</p>' +
             '<div class="yanz-caption-row">' +
-              '<input class="yanz-caption-input" id="yanzCaptionInput" type="search" placeholder="Nama lagu / kata di caption" autocomplete="off"/>' +
-              '<button type="button" class="yanz-caption-btn" id="yanzCaptionBtn">Cari</button>' +
+              '<input class="yanz-caption-input" id="yanzCaptionInput" type="search" placeholder="Contoh: Negoro angin" autocomplete="off"/>' +
+              '<button type="button" class="yanz-caption-btn" id="yanzCaptionBtn">Cari Sekarang</button>' +
             '</div>' +
             '<div class="yanz-searching" id="yanzSearching">' +
               '<div class="yanz-searching-logo">' +
                 '<img src="' + FAV + '" alt="" width="72" height="72"/>' +
                 '<div class="yanz-searching-scan"></div>' +
               '</div>' +
-              '<div class="yanz-searching-text">Mencari Preset…</div>' +
+              '<div class="yanz-searching-text">Sedang mencari preset…</div>' +
             '</div>' +
             '<div class="yanz-results" id="yanzResults"></div>' +
           '</div>' +
@@ -268,7 +268,7 @@
     if (!box) return;
     box.innerHTML = "";
     if (!data || !data.results || !data.results.length) {
-      box.innerHTML = '<div class="yanz-empty">' + esc((data && data.message) || "yah gada preset nya") + "</div>";
+      box.innerHTML = '<div class="yanz-empty">' + esc((data && data.message) || "Yah, tidak ada preset-nya") + "</div>";
       return;
     }
     data.results.forEach(function (r, idx) {
@@ -295,7 +295,7 @@
         return '<a href="' + esc(u) + '" target="_blank" rel="noopener">Buka Preset</a>';
       }).join("");
       var open = r.videoUrl
-        ? '<a class="yanz-result-open" href="' + esc(r.videoUrl) + '" target="_blank" rel="noopener">Link TikTok</a>'
+        ? '<a class="yanz-result-open" href="' + esc(r.videoUrl) + '" target="_blank" rel="noopener">Buka di TikTok</a>'
         : "";
       div.innerHTML =
         '<div class="yanz-result-media">' + media + "</div>" +
@@ -332,7 +332,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) { finish(data); })
       .catch(function () {
-        finish({ results: [], message: "yah gada preset nya" });
+        finish({ results: [], message: "Yah, tidak ada preset-nya" });
       });
   }
 
@@ -350,10 +350,52 @@
     setMode("url");
   }
 
+  
+  function ensureClock() {
+    if ($("yanzServerTime")) return;
+    var bar = document.createElement("div");
+    bar.id = "yanzServerTime";
+    bar.className = "yanz-server-time";
+    bar.innerHTML = '<span class="yanz-server-time-label">Waktu server</span> <span id="yanzServerTimeVal">—</span>';
+    document.body.appendChild(bar);
+    var baseUnix = null;
+    var basePerf = null;
+    function paint() {
+      var el = $("yanzServerTimeVal");
+      if (!el) return;
+      var nowUnix;
+      if (baseUnix != null && basePerf != null) {
+        nowUnix = baseUnix + (performance.now() - basePerf) / 1000;
+      } else {
+        nowUnix = Date.now() / 1000;
+      }
+      var d = new Date(nowUnix * 1000);
+      // display WIB = UTC+7
+      var wib = new Date(d.getTime() + 7 * 3600 * 1000);
+      function p(n) { return (n < 10 ? "0" : "") + n; }
+      el.textContent =
+        wib.getUTCFullYear() + "-" + p(wib.getUTCMonth()+1) + "-" + p(wib.getUTCDate()) + " " +
+        p(wib.getUTCHours()) + ":" + p(wib.getUTCMinutes()) + ":" + p(wib.getUTCSeconds()) + " WIB";
+    }
+    function sync() {
+      fetch("/api/time").then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.unix) {
+          baseUnix = j.unix;
+          basePerf = performance.now();
+          paint();
+        }
+      }).catch(function () { paint(); });
+    }
+    sync();
+    setInterval(paint, 1000);
+    setInterval(sync, 60000);
+  }
+
   function boot() {
     injectOnce();
     placeChrome();
     ensurePromo();
+    ensureClock();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
