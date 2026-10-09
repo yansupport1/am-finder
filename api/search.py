@@ -42,15 +42,36 @@ TT_VIDEO_RE = re.compile(
 )
 
 
-def http_get(url, ua=UA, timeout=14, referer="https://www.google.com/"):
-    req = Request(url, headers={
-        "User-Agent": ua,
-        "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
-        "Referer": referer,
-    })
-    with urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "ignore"), r.geturl()
+_UAS = [UA, UA_MOBILE,
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+]
+
+def http_get(url, ua=None, timeout=14, referer="https://www.google.com/"):
+    last_err = None
+    uas = [ua] if ua else _UAS
+    # try primary then one fallback
+    tried = []
+    for i, u in enumerate(uas[:2] if ua else _UAS[:3]):
+        if not u or u in tried:
+            continue
+        tried.append(u)
+        try:
+            req = Request(url, headers={
+                "User-Agent": u,
+                "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+                "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+                "Referer": referer,
+                "Cache-Control": "no-cache",
+            })
+            with urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", "ignore"), r.geturl()
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    raise RuntimeError("http_get failed")
 
 
 def extract_preset_links(text):
@@ -392,17 +413,30 @@ def search_own(query):
 
     key = q.lower()
     now = time.time()
-    if key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
-        return _CACHE[key][1]
+    if key in _CACHE:
+        ts, cached = _CACHE[key]
+        # only reuse non-empty cache
+        if cached and now - ts < _CACHE_TTL:
+            return cached
+        # empty cache expires fast (8s) so retry works
+        if not cached and now - ts < 8:
+            pass  # still try again below
+        elif not cached:
+            pass
 
     candidates = discover(q)
+    if not candidates:
+        # retry once with simplified query
+        simple = re.sub(r"[#@]+", " ", q).strip()
+        if simple and simple != q:
+            candidates = discover(simple)
     if not candidates:
         _CACHE[key] = (now, [])
         return []
 
     results = []
     # parallel read for speed + reliability
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         futs = {ex.submit(read_video_page, u): u for u in candidates}
         for fut in as_completed(futs):
             src_url = futs[fut]
@@ -488,7 +522,11 @@ def search_own(query):
         r.pop("_match", None)
 
     out = results[:15]
-    _CACHE[key] = (now, out)
+    # Jangan cache kosong lama-lama (biar retry user bisa dapat hasil)
+    if out:
+        _CACHE[key] = (now, out)
+    else:
+        _CACHE[key] = (now, [])
     return out
 
 

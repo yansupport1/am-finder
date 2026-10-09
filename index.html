@@ -536,12 +536,25 @@
         renderVideoList(data);
       }, wait);
     }
-    fetch("/api/search?q=" + encodeURIComponent(q))
-      .then(function (r) { return r.json(); })
-      .then(function (data) { finish(data); })
-      .catch(function () {
-        finish({ results: [], message: "Yah, tidak ada videonya" });
-      });
+    function doFetch(attempt) {
+      fetch("/api/search?q=" + encodeURIComponent(q) + "&_=" + Date.now())
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if ((!data.results || !data.results.length) && attempt < 2) {
+            setTimeout(function () { doFetch(attempt + 1); }, 1200);
+            return;
+          }
+          finish(data);
+        })
+        .catch(function () {
+          if (attempt < 2) {
+            setTimeout(function () { doFetch(attempt + 1); }, 1200);
+            return;
+          }
+          finish({ results: [], message: "Yah, tidak ada videonya" });
+        });
+    }
+    doFetch(1);
   }
 
   // Overlay wait when original URL Search is used
