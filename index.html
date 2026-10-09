@@ -145,6 +145,44 @@
 
   function $(id) { return document.getElementById(id); }
 
+  function runPercent(elId, durationMs, onDone) {
+    var el = $(elId);
+    var start = Date.now();
+    var timer = setInterval(function () {
+      var p = Math.min(100, Math.floor(((Date.now() - start) / durationMs) * 100));
+      if (el) el.textContent = p + "%";
+      if (p >= 100) {
+        clearInterval(timer);
+        if (onDone) onDone();
+      }
+    }, 80);
+    return timer;
+  }
+
+  function runPercentUntil(elId, getDoneFn) {
+    var el = $(elId);
+    var p = 0;
+    var timer = setInterval(function () {
+      if (getDoneFn && getDoneFn()) {
+        p = 100;
+        if (el) el.textContent = "100%";
+        clearInterval(timer);
+        return;
+      }
+      // ease toward 90% while waiting
+      if (p < 90) p += Math.max(1, Math.floor((90 - p) / 12));
+      if (el) el.textContent = p + "%";
+    }, 120);
+    return {
+      stop: function () {
+        clearInterval(timer);
+        if (el) el.textContent = "100%";
+      }
+    };
+  }
+
+
+
   function ensurePromo() {
     if ($("yanzJoinModal")) return;
     var wrap = document.createElement("div");
@@ -227,7 +265,7 @@
           '<div class="yanz-loader-scan"></div>' +
           '<div class="yanz-loader-ring"></div>' +
         '</div>' +
-        '<div class="yanz-loader-text">Sedang memuat AM Preset Finder…</div>' +
+        '<div class="yanz-loader-text">Sedang memuat AM Preset Finder…</div>' +'<div class="yanz-loader-pct" id="yanzLoaderPct">0%</div>' +
       '</div>' +
       '<div class="yanz-chrome" id="yanzChrome">' +
         '<div class="yanz-tabs" id="yanzTabs">' +
@@ -247,7 +285,7 @@
                 '<img src="' + FAV + '" alt="" width="72" height="72"/>' +
                 '<div class="yanz-searching-scan"></div>' +
               '</div>' +
-              '<div class="yanz-searching-text" id="yanzSearchingText">Sedang mencari video, tunggu…</div>' +
+              '<div class="yanz-searching-text" id="yanzSearchingText">Sedang mencari video, tunggu…</div>' +'<div class="yanz-loader-pct" id="yanzSearchPct">0%</div>' +
             '</div>' +
             '<div class="yanz-results" id="yanzResults"></div>' +
             '<div class="yanz-preset-box" id="yanzPresetBox" style="display:none"></div>' +
@@ -260,16 +298,16 @@
             '<img src="' + FAV + '" alt="" width="72" height="72"/>' +
             '<div class="yanz-searching-scan"></div>' +
           '</div>' +
-          '<div class="yanz-searching-text">Sedang mencari link, tunggu…</div>' +
+          '<div class="yanz-searching-text" id="yanzLinkText">Sedang mencari link, tunggu…</div>' +'<div class="yanz-loader-pct" id="yanzLinkPct">0%</div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(root);
     placeChrome();
     wire();
-    setTimeout(function () {
+    runPercent("yanzLoaderPct", 6000, function () {
       var L = $("yanzLoader");
       if (L) L.classList.add("is-done");
-    }, 6000);
+    });
   }
 
   function placeChrome() {
@@ -372,14 +410,16 @@
   function findPresetsFromVideo(videoUrl, meta) {
     var presetBox = $("yanzPresetBox");
     var results = $("yanzResults");
-    showSearching("Sedang mencari link, tunggu…");
+    showSearching("Sedang mencari link di caption, bio, komentar…");
     showLinkWait(true);
+    var linkDone = false;
+    var linkPct = runPercentUntil("yanzLinkPct", function () { return linkDone; });
+    var searchPct2 = runPercentUntil("yanzSearchPct", function () { return linkDone; });
     if (presetBox) {
       presetBox.style.display = "none";
       presetBox.innerHTML = "";
     }
     var started = Date.now();
-    // Use EventSource like original find API
     var url = "/api/find?url=" + encodeURIComponent(videoUrl);
     var es = null;
     var done = false;
@@ -387,8 +427,11 @@
     function finish(payload) {
       if (done) return;
       done = true;
+      linkDone = true;
+      if (linkPct) linkPct.stop();
+      if (searchPct2) searchPct2.stop();
       try { if (es) es.close(); } catch (e) {}
-      var wait = Math.max(0, 1200 - (Date.now() - started));
+      var wait = Math.max(0, 1000 - (Date.now() - started));
       setTimeout(function () {
         hideSearching();
         showLinkWait(false);
@@ -398,6 +441,12 @@
 
     try {
       es = new EventSource(url);
+      es.onmessage = function (ev) {
+        try {
+          var d = JSON.parse(ev.data);
+          if (d && (d.presetLinks || d.ok !== undefined)) finish(d);
+        } catch (e) {}
+      };
       es.addEventListener("result", function (ev) {
         try {
           finish(JSON.parse(ev.data));
@@ -474,9 +523,13 @@
     if (presetBox) { presetBox.style.display = "none"; presetBox.innerHTML = ""; }
     showSearching("Sedang mencari video, tunggu…");
     if (btn) btn.disabled = true;
+    var doneFlag = false;
+    var pct = runPercentUntil("yanzSearchPct", function () { return doneFlag; });
     var started = Date.now();
     function finish(data) {
-      var wait = Math.max(0, 1500 - (Date.now() - started));
+      doneFlag = true;
+      if (pct) pct.stop();
+      var wait = Math.max(0, 1200 - (Date.now() - started));
       setTimeout(function () {
         hideSearching();
         if (btn) btn.disabled = false;

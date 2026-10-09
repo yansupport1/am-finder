@@ -349,7 +349,21 @@ def discover(query):
         if len(urls) >= 20:
             break
 
-    return urls[:20]
+
+    # Extra: Brave search HTML
+    for q in variants[:3]:
+        try:
+            html, _ = http_get(
+                f"https://search.brave.com/search?q={quote(q)}",
+                timeout=12,
+                referer="https://search.brave.com/",
+            )
+            for m in TT_VIDEO_RE.finditer(html):
+                _add_url(urls, seen, m.group(0))
+        except Exception:
+            pass
+
+    return urls[:24]
 
 
 def caption_matches(desc, query):
@@ -391,27 +405,35 @@ def search_own(query):
     with ThreadPoolExecutor(max_workers=6) as ex:
         futs = {ex.submit(read_video_page, u): u for u in candidates}
         for fut in as_completed(futs):
+            src_url = futs[fut]
             try:
                 info = fut.result()
             except Exception:
+                nu, a, v = normalize_tt(src_url)
+                results.append({
+                    "id": v,
+                    "description": "Video TikTok ditemukan · ketuk untuk cari preset",
+                    "author": a or "tiktok",
+                    "cover": "",
+                    "playUrl": "",
+                    "videoUrl": nu,
+                    "presetLinks": [],
+                    "stats": {},
+                    "_match": False,
+                })
                 continue
             desc = info.get("description") or ""
             matched = caption_matches(desc, q)
-            has_preset = bool(info.get("presetLinks"))
-            # Semua kata boleh dicari: utamakan cocok caption
             tokens = [t for t in re.split(r"\s+", q.lower()) if t]
             any_token = any(t in desc.lower() for t in tokens) if tokens else False
-            if not matched and not any_token and not has_preset:
-                # keep item if description empty but we have id (rare) — still skip noise
-                if not (info.get("id") and info.get("author")):
-                    continue
-                if not any_token and not matched:
-                    continue
+            # SELALU tampilkan video yang berhasil ditemukan (meski caption gagal diload)
+            if not (info.get("videoUrl") or info.get("id")):
+                continue
 
             st = info.get("stats") or {}
             results.append({
                 "id": info.get("id") or "",
-                "description": desc,
+                "description": desc or ("Video TikTok · @" + (info.get("author") or "user")),
                 "author": info.get("author") or "",
                 "cover": info.get("cover") or "",
                 "playUrl": proxy_play(info.get("playUrl") or ""),
@@ -426,11 +448,29 @@ def search_own(query):
                     "likesText": fmt_num(st.get("likes")),
                     "commentsText": fmt_num(st.get("comments")),
                 },
-                "_match": matched,
+                "_match": bool(matched or any_token),
+            })
+
+    # Jika enrich gagal semua, tetap kirim daftar URL yang ditemukan
+    if not results and candidates:
+        for u in candidates[:12]:
+            nu, a, v = normalize_tt(u)
+            results.append({
+                "id": v,
+                "description": "Video TikTok ditemukan · ketuk untuk cari preset",
+                "author": a or "tiktok",
+                "cover": "",
+                "playUrl": "",
+                "videoUrl": nu,
+                "presetLinks": [],
+                "stats": {"views": None, "likes": None, "comments": None, "shares": None,
+                          "viewsText": None, "likesText": None, "commentsText": None},
+                "_match": False,
             })
 
     # sort: caption match + preset first
     def score(r):
+
         s = 0
         if r.get("_match"):
             s += 100

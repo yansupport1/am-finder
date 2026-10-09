@@ -769,3 +769,13 @@ body {
   color: #5eead4;
   margin-bottom: 8px;
 }
+
+.yanz-loader-pct {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #5eead4;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 20px rgba(94, 234, 212, 0.35);
+}
