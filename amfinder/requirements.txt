@@ -1,2 +1,0 @@
-# No external deps — pure Python stdlib
-# Vercel provides Python 3.9+
