@@ -312,17 +312,20 @@
     if (results) results.innerHTML = "";
     if (searching) searching.classList.add("is-show");
     if (btn) btn.disabled = true;
-    fetch("/api/search?q=" + encodeURIComponent(q))
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
+    var started = Date.now();
+    function finish(data) {
+      var wait = Math.max(0, 1500 - (Date.now() - started));
+      setTimeout(function () {
         if (searching) searching.classList.remove("is-show");
         if (btn) btn.disabled = false;
         renderResults(data);
-      })
+      }, wait);
+    }
+    fetch("/api/search?q=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (data) { finish(data); })
       .catch(function () {
-        if (searching) searching.classList.remove("is-show");
-        if (btn) btn.disabled = false;
-        renderResults({ results: [], message: "yah gada preset nya" });
+        finish({ results: [], message: "yah gada preset nya" });
       });
   }
 

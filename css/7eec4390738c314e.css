@@ -625,3 +625,20 @@ html, body {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
+
+/* search scan boost */
+.yanz-searching.is-show {
+  display: block !important;
+  padding: 32px 12px !important;
+}
+.yanz-searching-logo {
+  width: 80px !important;
+  height: 80px !important;
+  margin: 0 auto 16px !important;
+  border: 1px solid rgba(94, 234, 212, 0.35) !important;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.2);
+}
+.yanz-searching-text {
+  font-size: 15px !important;
+  letter-spacing: 0.03em;
+}
