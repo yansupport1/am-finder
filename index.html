@@ -134,6 +134,8 @@
 
 
 
+
+
 <!-- YANZ UI START -->
 <script>
 (function () {
@@ -162,7 +164,6 @@
       '<button type="button" class="yanz-toast-close" id="yanzToastClose">×</button>' +
       '</div></div>';
     document.body.appendChild(wrap);
-
     function openCh() { window.open(CHANNEL, "_blank", "noopener,noreferrer"); }
     function hideModal() { var m = $("yanzJoinModal"); if (m) m.classList.remove("is-open"); }
     function showModal() { var m = $("yanzJoinModal"); if (m) m.classList.add("is-open"); }
@@ -173,22 +174,46 @@
       showToast._t = setTimeout(function () { t.classList.remove("is-show"); }, 8000);
     }
     function hideToast() { var t = $("yanzToast"); if (t) t.classList.remove("is-show"); }
-
-    var skip = $("yanzSkipBtn");
-    var join = $("yanzJoinBtn");
-    var tj = $("yanzToastJoin");
-    var tc = $("yanzToastClose");
-    var ov = $("yanzJoinModal");
+    var skip = $("yanzSkipBtn"), join = $("yanzJoinBtn"), tj = $("yanzToastJoin"), tc = $("yanzToastClose"), ov = $("yanzJoinModal");
     if (skip) skip.onclick = hideModal;
     if (join) join.onclick = function () { openCh(); hideModal(); };
     if (tj) tj.onclick = function () { openCh(); hideToast(); };
     if (tc) tc.onclick = hideToast;
     if (ov) ov.addEventListener("click", function (e) { if (e.target === ov) hideModal(); });
-
-    // Always show popup every visit (after loader ~6s)
     setTimeout(showModal, 6200);
     setInterval(showToast, 10000);
     setTimeout(showToast, 12000);
+  }
+
+  function ensureClock() {
+    if ($("yanzServerTime")) return;
+    var bar = document.createElement("div");
+    bar.id = "yanzServerTime";
+    bar.className = "yanz-server-time";
+    bar.innerHTML = '<span class="yanz-server-time-label">Waktu server</span> <span id="yanzServerTimeVal">—</span>';
+    document.body.appendChild(bar);
+    var baseUnix = null, basePerf = null;
+    function paint() {
+      var el = $("yanzServerTimeVal");
+      if (!el) return;
+      var nowUnix = (baseUnix != null && basePerf != null)
+        ? baseUnix + (performance.now() - basePerf) / 1000
+        : Date.now() / 1000;
+      var d = new Date(nowUnix * 1000);
+      var wib = new Date(d.getTime() + 7 * 3600 * 1000);
+      function p(n) { return (n < 10 ? "0" : "") + n; }
+      el.textContent =
+        wib.getUTCFullYear() + "-" + p(wib.getUTCMonth()+1) + "-" + p(wib.getUTCDate()) + " " +
+        p(wib.getUTCHours()) + ":" + p(wib.getUTCMinutes()) + ":" + p(wib.getUTCSeconds()) + " WIB";
+    }
+    function sync() {
+      fetch("/api/time").then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.unix) { baseUnix = j.unix; basePerf = performance.now(); paint(); }
+      }).catch(function () { paint(); });
+    }
+    sync();
+    setInterval(paint, 1000);
+    setInterval(sync, 60000);
   }
 
   function injectOnce() {
@@ -207,25 +232,35 @@
       '<div class="yanz-chrome" id="yanzChrome">' +
         '<div class="yanz-tabs" id="yanzTabs">' +
           '<button type="button" class="yanz-tab is-active" id="yanzTabUrl">Cari via Link Video</button>' +
-          '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari via Caption TikTok</button>' +
+          '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari via Nama Lagu / Kata</button>' +
         '</div>' +
         '<div class="yanz-caption-panel" id="yanzCaptionPanel">' +
           '<div class="yanz-caption-box">' +
-            '<h2 class="yanz-caption-title">Cari preset dari caption TikTok</h2>' +
-            '<p class="yanz-caption-hint">Ketik kata di caption video, contoh: <b>Negoro angin</b>. Sistem akan mencari video TikTok yang caption-nya mengandung kata itu.</p>' +
+            '<h2 class="yanz-caption-title">Cari video, lalu pilih untuk ambil preset</h2>' +
+            '<p class="yanz-caption-hint">1) Ketik <b>nama lagu / kata kunci</b> → 2) Pilih video → 3) Sistem cari link preset di deskripsi, bio, komentar & balasan.</p>' +
             '<div class="yanz-caption-row">' +
               '<input class="yanz-caption-input" id="yanzCaptionInput" type="search" placeholder="Contoh: Negoro angin" autocomplete="off"/>' +
-              '<button type="button" class="yanz-caption-btn" id="yanzCaptionBtn">Cari Sekarang</button>' +
+              '<button type="button" class="yanz-caption-btn" id="yanzCaptionBtn">Cari Video</button>' +
             '</div>' +
             '<div class="yanz-searching" id="yanzSearching">' +
               '<div class="yanz-searching-logo">' +
                 '<img src="' + FAV + '" alt="" width="72" height="72"/>' +
                 '<div class="yanz-searching-scan"></div>' +
               '</div>' +
-              '<div class="yanz-searching-text">Sedang mencari preset…</div>' +
+              '<div class="yanz-searching-text" id="yanzSearchingText">Sedang mencari video, tunggu…</div>' +
             '</div>' +
             '<div class="yanz-results" id="yanzResults"></div>' +
+            '<div class="yanz-preset-box" id="yanzPresetBox" style="display:none"></div>' +
           '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="yanz-link-overlay" id="yanzLinkOverlay" aria-hidden="true">' +
+        '<div class="yanz-link-card">' +
+          '<div class="yanz-searching-logo">' +
+            '<img src="' + FAV + '" alt="" width="72" height="72"/>' +
+            '<div class="yanz-searching-scan"></div>' +
+          '</div>' +
+          '<div class="yanz-searching-text">Sedang mencari link, tunggu…</div>' +
         '</div>' +
       '</div>';
     document.body.appendChild(root);
@@ -263,17 +298,42 @@
     });
   }
 
-  function renderResults(data) {
+  function showSearching(text) {
+    var searching = $("yanzSearching");
+    var st = $("yanzSearchingText");
+    if (st && text) st.textContent = text;
+    if (searching) searching.classList.add("is-show");
+  }
+  function hideSearching() {
+    var searching = $("yanzSearching");
+    if (searching) searching.classList.remove("is-show");
+  }
+
+  function showLinkWait(on) {
+    var ov = $("yanzLinkOverlay");
+    if (!ov) return;
+    if (on) ov.classList.add("is-show");
+    else ov.classList.remove("is-show");
+  }
+
+  function renderVideoList(data) {
     var box = $("yanzResults");
+    var presetBox = $("yanzPresetBox");
+    if (presetBox) { presetBox.style.display = "none"; presetBox.innerHTML = ""; }
     if (!box) return;
     box.innerHTML = "";
     if (!data || !data.results || !data.results.length) {
-      box.innerHTML = '<div class="yanz-empty">' + esc((data && data.message) || "Yah, tidak ada preset-nya") + "</div>";
+      box.innerHTML = '<div class="yanz-empty">' + esc((data && data.message) || "Yah, tidak ada videonya") + "</div>";
       return;
     }
+    var title = document.createElement("div");
+    title.className = "yanz-step-title";
+    title.textContent = "Pilih video di bawah, lalu kami cari link preset-nya";
+    box.appendChild(title);
+
     data.results.forEach(function (r, idx) {
       var div = document.createElement("div");
-      div.className = "yanz-result";
+      div.className = "yanz-result yanz-result-pick";
       div.style.animationDelay = (idx * 0.04) + "s";
       var st = r.stats || {};
       var statsHtml =
@@ -282,58 +342,196 @@
         '<span>♥ ' + esc(st.likesText || st.likes || "—") + "</span>" +
         '<span>💬 ' + esc(st.commentsText || st.comments || "—") + "</span>" +
         "</div>";
-      var media = "";
-      if (r.playUrl) {
-        media = '<video class="yanz-result-video" src="' + esc(r.playUrl) + '" poster="' + esc(r.cover || "") +
-          '" controls playsinline preload="metadata"></video>';
-      } else if (r.cover) {
-        media = '<img class="yanz-result-cover" src="' + esc(r.cover) + '" alt=""/>';
-      } else {
-        media = '<div class="yanz-result-cover"></div>';
-      }
-      var links = (r.presetLinks || []).map(function (u) {
-        return '<a href="' + esc(u) + '" target="_blank" rel="noopener">Buka Preset</a>';
-      }).join("");
-      var open = r.videoUrl
-        ? '<a class="yanz-result-open" href="' + esc(r.videoUrl) + '" target="_blank" rel="noopener">Buka di TikTok</a>'
-        : "";
+      var media = r.cover
+        ? '<img class="yanz-result-cover" src="' + esc(r.cover) + '" alt=""/>'
+        : '<div class="yanz-result-cover"></div>';
       div.innerHTML =
         '<div class="yanz-result-media">' + media + "</div>" +
         '<div class="yanz-result-body">' +
         '<div class="yanz-result-author">@' + esc(String(r.author || "unknown").replace(/^@/, "")) + "</div>" +
         '<div class="yanz-result-desc">' + esc(r.description || "") + "</div>" +
         statsHtml +
-        '<div class="yanz-result-links">' + links + open + "</div>" +
+        '<button type="button" class="yanz-pick-btn">Pilih & Cari Preset</button>' +
         "</div>";
+      var btn = div.querySelector(".yanz-pick-btn");
+      var videoUrl = r.videoUrl || "";
+      if (btn) {
+        btn.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (videoUrl) findPresetsFromVideo(videoUrl, r);
+        };
+      }
+      div.onclick = function () {
+        if (videoUrl) findPresetsFromVideo(videoUrl, r);
+      };
       box.appendChild(div);
     });
   }
 
-  function doSearch() {
+  function findPresetsFromVideo(videoUrl, meta) {
+    var presetBox = $("yanzPresetBox");
+    var results = $("yanzResults");
+    showSearching("Sedang mencari link, tunggu…");
+    showLinkWait(true);
+    if (presetBox) {
+      presetBox.style.display = "none";
+      presetBox.innerHTML = "";
+    }
+    var started = Date.now();
+    // Use EventSource like original find API
+    var url = "/api/find?url=" + encodeURIComponent(videoUrl);
+    var es = null;
+    var done = false;
+
+    function finish(payload) {
+      if (done) return;
+      done = true;
+      try { if (es) es.close(); } catch (e) {}
+      var wait = Math.max(0, 1200 - (Date.now() - started));
+      setTimeout(function () {
+        hideSearching();
+        showLinkWait(false);
+        renderPresetResult(payload, meta, videoUrl);
+      }, wait);
+    }
+
+    try {
+      es = new EventSource(url);
+      es.addEventListener("result", function (ev) {
+        try {
+          finish(JSON.parse(ev.data));
+        } catch (e) {
+          finish({ ok: false, presetLinks: [] });
+        }
+      });
+      es.addEventListener("error", function () {
+        // fallback fetch if SSE fails mid-way
+        if (done) return;
+        fetch(url.replace("/api/find", "/api/find")).catch(function () {});
+      });
+      es.onerror = function () {
+        if (done) return;
+        // after error, try one-shot: some hosts buffer SSE poorly — retry with fetch stream not available
+        setTimeout(function () {
+          if (done) return;
+          finish({ ok: false, presetLinks: [], message: "Yah, tidak ada preset-nya" });
+        }, 25000);
+      };
+    } catch (e) {
+      finish({ ok: false, presetLinks: [], message: "Yah, tidak ada preset-nya" });
+    }
+  }
+
+  function renderPresetResult(data, meta, videoUrl) {
+    var presetBox = $("yanzPresetBox");
+    if (!presetBox) return;
+    presetBox.style.display = "block";
+    var links = [];
+    if (data && Array.isArray(data.presetLinks)) {
+      links = data.presetLinks.map(function (x) {
+        return typeof x === "string" ? x : (x && (x.url || x.link || x.href)) || "";
+      }).filter(Boolean);
+    } else if (data && data.presets) {
+      links = data.presets;
+    }
+    // also merge from nested
+    if (data && data.result && data.result.presetLinks) {
+      links = data.result.presetLinks;
+    }
+
+    var html = '<div class="yanz-preset-head">Hasil preset dari video yang dipilih</div>';
+    if (meta) {
+      html += '<div class="yanz-result-author">@' + esc(String(meta.author || "").replace(/^@/, "")) + "</div>";
+      html += '<div class="yanz-result-desc">' + esc(meta.description || "") + "</div>";
+    }
+    if (videoUrl) {
+      html += '<p><a class="yanz-result-open" href="' + esc(videoUrl) + '" target="_blank" rel="noopener">Buka di TikTok</a></p>';
+    }
+    if (links && links.length) {
+      html += '<div class="yanz-result-links">';
+      links.forEach(function (u) {
+        var href = typeof u === "string" ? u : (u.url || "");
+        if (!href) return;
+        html += '<a href="' + esc(href) + '" target="_blank" rel="noopener">Buka Preset</a>';
+      });
+      html += "</div>";
+    } else {
+      html += '<div class="yanz-empty">Yah, tidak ada preset-nya di deskripsi / bio / komentar / balasan</div>';
+    }
+    presetBox.innerHTML = html;
+    try { presetBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+  }
+
+  function searchVideos() {
     var input = $("yanzCaptionInput");
     var btn = $("yanzCaptionBtn");
-    var searching = $("yanzSearching");
-    var results = $("yanzResults");
     var q = (input && input.value || "").trim();
     if (!q) { if (input) input.focus(); return; }
+    var results = $("yanzResults");
+    var presetBox = $("yanzPresetBox");
     if (results) results.innerHTML = "";
-    if (searching) searching.classList.add("is-show");
+    if (presetBox) { presetBox.style.display = "none"; presetBox.innerHTML = ""; }
+    showSearching("Sedang mencari video, tunggu…");
     if (btn) btn.disabled = true;
     var started = Date.now();
     function finish(data) {
       var wait = Math.max(0, 1500 - (Date.now() - started));
       setTimeout(function () {
-        if (searching) searching.classList.remove("is-show");
+        hideSearching();
         if (btn) btn.disabled = false;
-        renderResults(data);
+        renderVideoList(data);
       }, wait);
     }
     fetch("/api/search?q=" + encodeURIComponent(q))
       .then(function (r) { return r.json(); })
       .then(function (data) { finish(data); })
       .catch(function () {
-        finish({ results: [], message: "Yah, tidak ada preset-nya" });
+        finish({ results: [], message: "Yah, tidak ada videonya" });
       });
+  }
+
+  // Overlay wait when original URL Search is used
+  function wireUrlSearchOverlay() {
+    function bind() {
+      var buttons = document.querySelectorAll("button, [type=submit]");
+      buttons.forEach(function (b) {
+        if (b.id === "yanzCaptionBtn" || b.id === "yanzTabUrl" || b.id === "yanzTabCaption") return;
+        if (b.getAttribute("data-yanz-linkwait")) return;
+        var txt = (b.textContent || "").toLowerCase();
+        if (txt.indexOf("search") >= 0 || txt.indexOf("cari") >= 0) {
+          b.setAttribute("data-yanz-linkwait", "1");
+          b.addEventListener("click", function () {
+            if (document.body.classList.contains("mode-caption")) return;
+            showLinkWait(true);
+            // hide when network settles a bit / SSE likely done
+            setTimeout(function () { showLinkWait(false); }, 12000);
+          });
+        }
+      });
+    }
+    bind();
+    setTimeout(bind, 1000);
+    setTimeout(bind, 3000);
+    // Also observe EventSource creation indirectly: MutationObserver not needed
+    var origES = window.EventSource;
+    if (origES && !window.__yanzESHook) {
+      window.__yanzESHook = true;
+      window.EventSource = function (url, cfg) {
+        var isFind = String(url || "").indexOf("/api/find") >= 0;
+        if (isFind && !document.body.classList.contains("mode-caption")) {
+          showLinkWait(true);
+        }
+        var es = new origES(url, cfg);
+        if (isFind) {
+          var hide = function () { setTimeout(function () { showLinkWait(false); }, 400); };
+          es.addEventListener("result", hide);
+          es.addEventListener("error", function () { setTimeout(hide, 800); });
+        }
+        return es;
+      };
+      window.EventSource.prototype = origES.prototype;
+    }
   }
 
   function wire() {
@@ -343,52 +541,12 @@
     var input = $("yanzCaptionInput");
     if (urlTab) urlTab.onclick = function () { setMode("url"); };
     if (capTab) capTab.onclick = function () { setMode("caption"); };
-    if (btn) btn.onclick = doSearch;
+    if (btn) btn.onclick = searchVideos;
     if (input) input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") doSearch();
+      if (e.key === "Enter") searchVideos();
     });
     setMode("url");
-  }
-
-  
-  function ensureClock() {
-    if ($("yanzServerTime")) return;
-    var bar = document.createElement("div");
-    bar.id = "yanzServerTime";
-    bar.className = "yanz-server-time";
-    bar.innerHTML = '<span class="yanz-server-time-label">Waktu server</span> <span id="yanzServerTimeVal">—</span>';
-    document.body.appendChild(bar);
-    var baseUnix = null;
-    var basePerf = null;
-    function paint() {
-      var el = $("yanzServerTimeVal");
-      if (!el) return;
-      var nowUnix;
-      if (baseUnix != null && basePerf != null) {
-        nowUnix = baseUnix + (performance.now() - basePerf) / 1000;
-      } else {
-        nowUnix = Date.now() / 1000;
-      }
-      var d = new Date(nowUnix * 1000);
-      // display WIB = UTC+7
-      var wib = new Date(d.getTime() + 7 * 3600 * 1000);
-      function p(n) { return (n < 10 ? "0" : "") + n; }
-      el.textContent =
-        wib.getUTCFullYear() + "-" + p(wib.getUTCMonth()+1) + "-" + p(wib.getUTCDate()) + " " +
-        p(wib.getUTCHours()) + ":" + p(wib.getUTCMinutes()) + ":" + p(wib.getUTCSeconds()) + " WIB";
-    }
-    function sync() {
-      fetch("/api/time").then(function (r) { return r.json(); }).then(function (j) {
-        if (j && j.unix) {
-          baseUnix = j.unix;
-          basePerf = performance.now();
-          paint();
-        }
-      }).catch(function () { paint(); });
-    }
-    sync();
-    setInterval(paint, 1000);
-    setInterval(sync, 60000);
+    wireUrlSearchOverlay();
   }
 
   function boot() {
@@ -396,6 +554,7 @@
     placeChrome();
     ensurePromo();
     ensureClock();
+    wireUrlSearchOverlay();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
