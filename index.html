@@ -361,7 +361,14 @@
     if (!box) return;
     box.innerHTML = "";
     if (!data || !data.results || !data.results.length) {
-      box.innerHTML = '<div class="yanz-empty">' + esc((data && data.message) || "Yah, tidak ada videonya") + "</div>";
+      var q = ($("yanzCaptionInput") && $("yanzCaptionInput").value) || "";
+      var ttSearch = "https://www.tiktok.com/search/video?q=" + encodeURIComponent(q);
+      box.innerHTML =
+        '<div class="yanz-empty">' +
+        '<p>Belum ketemu video otomatis (TikTok sering membatasi server).</p>' +
+        '<p style="margin-top:8px">Coba buka pencarian TikTok, salin link video, lalu tempel di tab <b>Cari via Link Video</b>.</p>' +
+        '<p style="margin-top:12px"><a class="yanz-result-open" href="' + esc(ttSearch) + '" target="_blank" rel="noopener">Buka pencarian di TikTok</a></p>' +
+        "</div>";
       return;
     }
     var title = document.createElement("div");

@@ -37,7 +37,7 @@ AM_PATTERNS = [
 ]
 
 TT_VIDEO_RE = re.compile(
-    r"https?://(?:www\.)?tiktok\.com/@([\w.\-]+)/video/(\d+)",
+    r"(?:https?://)?(?:www\.)?tiktok\.com/@([\w.\-]+)/video/(\d+)",
     re.I,
 )
 
@@ -111,10 +111,16 @@ def fmt_num(n):
 
 
 def normalize_tt(url):
-    url = unescape(url or "").split("#")[0]
+    url = unescape(url or "").split("#")[0].strip()
     m = TT_VIDEO_RE.search(url)
     if m:
         return f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}", m.group(1), m.group(2)
+    if url.startswith("//"):
+        url = "https:" + url
+    elif url.startswith("tiktok.com"):
+        url = "https://www." + url
+    elif url.startswith("www.tiktok.com"):
+        url = "https://" + url
     return url.split("?")[0], "", ""
 
 
@@ -300,91 +306,96 @@ def _add_url(bucket, seen, url):
     bucket.append(nu)
 
 
+
 def discover(query):
+    """Find TikTok video URLs for a keyword. Uses multiple public indexes."""
     urls, seen = [], set()
+    q = (query or "").strip()
+    if not q:
+        return []
+
     variants = [
-        f'site:tiktok.com/video {query}',
-        f'site:tiktok.com {query} preset',
-        f'site:tiktok.com {query} #preset',
-        f'site:tiktok.com {query} preset am',
-        f'site:tiktok.com {query} preset alight',
-        f'{query} #preset site:tiktok.com',
-        f'{query} preset alight motion tiktok',
-        f'{query} "preset" tiktok',
+        f"{q} tiktok",
+        f"{q} preset tiktok",
+        f"{q} #preset tiktok",
+        f"{q} alight motion tiktok",
+        f'site:tiktok.com/video {q}',
+        f'site:tiktok.com {q}',
+        f'"{q}" site:tiktok.com',
     ]
 
-    # DuckDuckGo
-    for q in variants[:4]:
-        try:
-            html, _ = http_get(
-                f"https://html.duckduckgo.com/html/?q={quote(q)}",
-                timeout=12,
-                referer="https://duckduckgo.com/",
-            )
-            for m in re.finditer(r"uddg=([^&\"']+)", html):
-                try:
-                    link = unquote(m.group(1))
-                except Exception:
-                    continue
+    def pull(html):
+        if not html:
+            return
+        for m in TT_VIDEO_RE.finditer(html):
+            _add_url(urls, seen, m.group(0))
+        for m in re.finditer(r"uddg=([^&\"']+)", html):
+            try:
+                link = unquote(m.group(1))
+            except Exception:
+                continue
+            if "tiktok.com" in link:
                 _add_url(urls, seen, link)
-            for m in TT_VIDEO_RE.finditer(html):
-                _add_url(urls, seen, m.group(0))
-        except Exception:
-            pass
+        for m in re.finditer(r"/url\?q=(https?://[^&]+)", html):
+            try:
+                link = unquote(m.group(1))
+            except Exception:
+                continue
+            if "tiktok.com" in link:
+                _add_url(urls, seen, link)
+
+    # 1) DuckDuckGo lite + html (often works from cloud)
+    for vq in variants:
         if len(urls) >= 15:
             break
-
-    # Bing
-    for q in variants[:3]:
-        try:
-            html, _ = http_get(
-                f"https://www.bing.com/search?q={quote(q)}&count=20",
-                timeout=12,
-                referer="https://www.bing.com/",
-            )
-            for m in TT_VIDEO_RE.finditer(html):
-                _add_url(urls, seen, m.group(0))
-            for m in re.finditer(r'href="(https?://(?:www\.)?tiktok\.com/@[^"]+/video/\d+[^"]*)"', html):
-                _add_url(urls, seen, m.group(1))
-        except Exception:
-            pass
-        if len(urls) >= 18:
-            break
-
-    # TikTok search pages
-    for kw in (f"{query} #preset", f"{query} preset", f"{query} preset am", f"{query} alight", query):
-        for path in (
-            f"https://www.tiktok.com/search/video?q={quote(kw)}",
-            f"https://www.tiktok.com/search?q={quote(kw)}",
+        for base in (
+            f"https://lite.duckduckgo.com/lite/?q={quote(vq)}",
+            f"https://html.duckduckgo.com/html/?q={quote(vq)}",
         ):
             try:
-                html, _ = http_get(path, ua=UA_MOBILE, timeout=12, referer="https://www.tiktok.com/")
-                for m in TT_VIDEO_RE.finditer(html):
-                    _add_url(urls, seen, m.group(0))
-                for m in re.finditer(r'"uniqueId"\s*:\s*"([^"]+)".{0,240}?"id"\s*:\s*"(\d{10,})"', html, re.S):
-                    _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}")
-                for m in re.finditer(r'"id"\s*:\s*"(\d{10,})".{0,240}?"uniqueId"\s*:\s*"([^"]+)"', html, re.S):
-                    _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(2)}/video/{m.group(1)}")
+                html, _ = http_get(base, timeout=12, referer="https://duckduckgo.com/")
+                pull(html)
             except Exception:
                 pass
-        if len(urls) >= 20:
+        if len(urls) >= 8:
             break
 
+    # 2) Bing
+    if len(urls) < 8:
+        for vq in variants[:4]:
+            try:
+                html, _ = http_get(
+                    f"https://www.bing.com/search?q={quote(vq)}&count=20",
+                    timeout=12,
+                    referer="https://www.bing.com/",
+                )
+                pull(html)
+            except Exception:
+                pass
+            if len(urls) >= 10:
+                break
 
-    # Extra: Brave search HTML
-    for q in variants[:3]:
-        try:
-            html, _ = http_get(
-                f"https://search.brave.com/search?q={quote(q)}",
-                timeout=12,
-                referer="https://search.brave.com/",
-            )
-            for m in TT_VIDEO_RE.finditer(html):
-                _add_url(urls, seen, m.group(0))
-        except Exception:
-            pass
+    # 3) TikTok search pages (SSR may be empty, but sometimes has ids)
+    if len(urls) < 5:
+        for kw in (q, f"{q} preset", f"{q} #preset"):
+            for path in (
+                f"https://www.tiktok.com/search/video?q={quote(kw)}",
+                f"https://www.tiktok.com/search?q={quote(kw)}",
+            ):
+                try:
+                    html, _ = http_get(path, ua=UA_MOBILE, timeout=12, referer="https://www.tiktok.com/")
+                    pull(html)
+                    for m in re.finditer(r'"uniqueId"\s*:\s*"([^"]+)".{0,240}?"id"\s*:\s*"(\d{10,})"', html, re.S):
+                        _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(1)}/video/{m.group(2)}")
+                    for m in re.finditer(r'"id"\s*:\s*"(\d{10,})".{0,240}?"uniqueId"\s*:\s*"([^"]+)"', html, re.S):
+                        _add_url(urls, seen, f"https://www.tiktok.com/@{m.group(2)}/video/{m.group(1)}")
+                except Exception:
+                    pass
+            if len(urls) >= 8:
+                break
 
-    return urls[:24]
+    return urls[:20]
+
 
 
 def caption_matches(desc, query):
