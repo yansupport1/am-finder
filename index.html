@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--MeydxY6lxW1B4JHzCvUlX--><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><link rel="stylesheet" href="css/7eec4390738c314e.css" data-precedence="next"><link rel="preload" as="script" fetchpriority="low" href="js/webpack-4a462cecab786e93.js"><script src="js/4bd1b696-c023c6e3521b1417.js" async=""></script><script src="js/255-2dbbf79f36f0dfa2.js" async=""></script><script src="js/main-app-f9b5d20365cb8be2.js" async=""></script><script src="js/layout-57cdc7e6c94f9e72.js" async=""></script><script src="js/page-4a01fbf679645a80.js" async=""></script><link rel="canonical" href="https://amfinder.web.id/"><title>AM Preset Finder</title><meta name="description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta property="og:title" content="AM Preset Finder"><meta property="og:description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta property="og:site_name" content="AM Preset Finder"><meta property="og:image" content="images/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="AM Preset Finder"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="AM Preset Finder"><meta name="twitter:description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta name="twitter:image" content="images/og-image.png"><link rel="shortcut icon" href="images/favicon.ico"><link rel="icon" href="images/favicon.ico" sizes="48x48"><link rel="icon" href="images/favicon-48x48.png" type="image/png" sizes="48x48"><link rel="icon" href="images/icon-192.png" type="image/png" sizes="192x192"><link rel="icon" href="images/icon.svg" type="image/svg+xml" sizes="any"><link rel="apple-touch-icon" href="images/apple-icon.png" type="image/png" sizes="180x180"><script src="js/polyfills-42372ed130431b0a.js" nomodule=""></script><link rel="stylesheet" href="css/yanz-anim.css"><script src="js/yanz-anim.js" defer></script></head><body class="min-h-screen antialiased">
+<!DOCTYPE html><!--MeydxY6lxW1B4JHzCvUlX--><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><link rel="stylesheet" href="css/7eec4390738c314e.css" data-precedence="next"><link rel="preload" as="script" fetchpriority="low" href="js/webpack-4a462cecab786e93.js"><script src="js/4bd1b696-c023c6e3521b1417.js" async=""></script><script src="js/255-2dbbf79f36f0dfa2.js" async=""></script><script src="js/main-app-f9b5d20365cb8be2.js" async=""></script><script src="js/layout-57cdc7e6c94f9e72.js" async=""></script><script src="js/page-4a01fbf679645a80.js" async=""></script><link rel="canonical" href="https://amfinder.web.id/"><title>AM Preset Finder</title><meta name="description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta property="og:title" content="AM Preset Finder"><meta property="og:description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta property="og:site_name" content="AM Preset Finder"><meta property="og:image" content="images/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="AM Preset Finder"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="AM Preset Finder"><meta name="twitter:description" content="Paste a TikTok video link and get the Alight Motion preset links from its description, bio, comments and link in bio."><meta name="twitter:image" content="images/og-image.png"><link rel="shortcut icon" href="images/favicon.ico"><link rel="icon" href="images/favicon.ico" sizes="48x48"><link rel="icon" href="images/favicon-48x48.png" type="image/png" sizes="48x48"><link rel="icon" href="images/icon-192.png" type="image/png" sizes="192x192"><link rel="icon" href="images/icon.svg" type="image/svg+xml" sizes="any"><link rel="apple-touch-icon" href="images/apple-icon.png" type="image/png" sizes="180x180"><script src="js/polyfills-42372ed130431b0a.js" nomodule=""></script><link rel="stylesheet" href="css/yanz-anim.css?v=3"><script src="js/yanz-anim.js?v=3" defer></script></head><body class="min-h-screen antialiased">
 
 
 
@@ -139,6 +139,7 @@
 <!-- YANZ UI START -->
 <script>
 (function () {
+  window.__yanzT0 = window.__yanzT0 || Date.now();
   var ICON = "images/icon-192.png";
   var FAV = "images/favicon-48x48.png";
   var CHANNEL = "https://whatsapp.com/channel/0029VbClbeZDJ6GujGMyQ53T";
@@ -265,13 +266,21 @@
           '<div class="yanz-loader-scan"></div>' +
           '<div class="yanz-loader-ring"></div>' +
         '</div>' +
-        '<div class="yanz-loader-text">Sedang memuat AM Preset Finder…</div>' +'<div class="yanz-loader-pct" id="yanzLoaderPct">0%</div>' +
+        '<div class="yanz-loader-text" id="yanzLoaderText">Sedang memuat AM Preset Finder…</div>' +
+        '<div class="yanz-loader-pct" id="yanzLoaderPct">0%</div>' +
+        '<div class="yz-loadbar"><i id="yanzLoaderBar"></i></div>' +
+        '<div class="yz-loadtip" id="yanzLoaderTip">Menyiapkan mesin pencari preset…</div>' +
       '</div>' +
       '<div class="yanz-chrome" id="yanzChrome">' +
         '<div class="yanz-tabs" id="yanzTabs">' +
           '<button type="button" class="yanz-tab is-active" id="yanzTabUrl">Cari via Link Video</button>' +
           '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari via Nama Lagu / Kata</button>' +
         '</div>' +
+        '<button type="button" class="yz-feature" id="yanzFeatureTrace">' +
+          '<span class="yz-feature-ico"><svg viewBox="0 0 120 90" aria-hidden="true"><rect class="yz-bbox" x="14" y="10" width="92" height="70" rx="3"/><path class="yz-trace-path" d="M24 62 C24 22 62 12 76 36 S100 70 62 72 S24 80 24 62Z"/><g class="yz-nodes"><rect x="21" y="59" width="6" height="6"/><rect x="59" y="14" width="6" height="6"/><rect x="73" y="33" width="6" height="6"/><rect x="59" y="69" width="6" height="6"/><rect x="97" y="62" width="6" height="6"/></g></svg></span>' +
+          '<span class="yz-feature-txt"><b>Auto Trace Vektor</b><small>Ubah foto jadi vektor otomatis</small></span>' +
+          '<span class="yz-soon-badge">Coming Soon</span>' +
+        '</button>' +
         '<div class="yanz-caption-panel" id="yanzCaptionPanel">' +
           '<div class="yanz-caption-box">' +
             '<h2 class="yanz-caption-title">Cari video, lalu pilih untuk ambil preset</h2>' +
@@ -296,6 +305,18 @@
           '</div>' +
         '</div>' +
       '</div>' +
+      '<div class="yz-soon" id="yanzSoonModal" role="dialog" aria-modal="true" aria-hidden="true">' +
+        '<div class="yz-soon-card">' +
+          '<div class="yz-soon-art"><svg viewBox="0 0 120 90" aria-hidden="true"><rect class="yz-bbox" x="14" y="10" width="92" height="70" rx="3"/><path class="yz-trace-path" d="M24 62 C24 22 62 12 76 36 S100 70 62 72 S24 80 24 62Z"/><g class="yz-nodes"><rect x="21" y="59" width="6" height="6"/><rect x="59" y="14" width="6" height="6"/><rect x="73" y="33" width="6" height="6"/><rect x="59" y="69" width="6" height="6"/><rect x="97" y="62" width="6" height="6"/></g></svg></div>' +
+          '<h3 class="yz-soon-title">Auto Trace Vektor</h3>' +
+          '<div class="yz-soon-tag">COMING SOON</div>' +
+          '<p class="yz-soon-desc">Fitur ini sedang disiapkan.<br/><b>Pantau di saluran</b> WhatsApp supaya tahu duluan saat rilis.</p>' +
+          '<div class="yz-soon-actions">' +
+            '<button type="button" class="yz-soon-btn yz-soon-close" id="yanzSoonClose">Tutup</button>' +
+            '<button type="button" class="yz-soon-btn yz-soon-join" id="yanzSoonJoin">Pantau di Saluran</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<div class="yanz-link-overlay" id="yanzLinkOverlay" aria-hidden="true">' +
         '<div class="yanz-link-card">' +
           '<div class="yz-hunt">' +
@@ -312,10 +333,37 @@
     document.body.appendChild(root);
     placeChrome();
     wire();
-    runPercent("yanzLoaderPct", 6000, function () {
-      var L = $("yanzLoader");
-      if (L) L.classList.add("is-done");
-    });
+runLoader();
+  }
+
+  // Loading screen: persen mengikuti kondisi nyata halaman (event "load"), minimal 1,6 dtk
+  // supaya animasinya terlihat, maksimal 6 dtk. Tetap lanjut dari persen sebelumnya bila
+  // React me-render ulang dokumen (hydration) sehingga loader dibuat ulang.
+  function runLoader() {
+    var MIN = 1600, MAX = 6000;
+    var tips = ["Menyiapkan mesin pencari preset…", "Memuat tampilan…", "Menghubungkan ke server…", "Hampir siap…"];
+    var loaded = document.readyState === "complete";
+    if (!loaded) window.addEventListener("load", function () { loaded = true; });
+    var p = window.__yanzP || 0, tipI = 0, lastTip = 0;
+    var timer = setInterval(function () {
+      var pctEl = $("yanzLoaderPct"), bar = $("yanzLoaderBar"), tip = $("yanzLoaderTip"), L = $("yanzLoader");
+      var elapsed = Date.now() - (window.__yanzT0 || Date.now());
+      var ready = (loaded && elapsed >= MIN) || elapsed >= MAX;
+      var target = ready ? 100 : Math.min(92, (elapsed / (MIN * 1.5)) * 92);
+      if (p < target) p = Math.min(target, p + Math.max(1, Math.ceil((target - p) / 5)));
+      window.__yanzP = p;
+      if (pctEl) pctEl.textContent = Math.round(p) + "%";
+      if (bar) bar.style.transform = "scaleX(" + (p / 100) + ")";
+      if (tip && Date.now() - lastTip > 650 && p < 100) {
+        lastTip = Date.now();
+        tip.textContent = tips[tipI++ % tips.length];
+      }
+      if (p >= 100) {
+        clearInterval(timer);
+        if (tip) tip.textContent = "Siap!";
+        setTimeout(function () { var l = $("yanzLoader"); if (l) l.classList.add("is-done"); }, 300);
+      }
+    }, 60);
   }
 
   function placeChrome() {
@@ -688,6 +736,17 @@
         renderVideoList(data);
       }, wait);
     }
+    var ckey = "yanz:s:" + q.toLowerCase();
+    function cacheGet() {
+      try {
+        var o = JSON.parse(localStorage.getItem(ckey) || "null");
+        if (o && Date.now() - o.t < 600000 && o.d && o.d.results && o.d.results.length) return o.d;
+      } catch (e) {}
+      return null;
+    }
+    function cachePut(d) {
+      try { if (d && d.results && d.results.length && d.status !== "stale") localStorage.setItem(ckey, JSON.stringify({ t: Date.now(), d: d })); } catch (e) {}
+    }
     function doFetch(attempt) {
       // Tidak auto-retry saat server menjawab kosong/diblok (itu memperparah blokir).
       // Retry hanya bila koneksi putus / respons bukan JSON (mis. timeout platform).
@@ -697,6 +756,7 @@
           var data = null;
           try { data = JSON.parse(txt); } catch (e) {}
           if (!data) throw new Error("bad-json");
+          cachePut(data);
           finish(data);
         })
         .catch(function () {
@@ -711,6 +771,8 @@
           });
         });
     }
+    var cached = cacheGet();
+    if (cached) { finish(cached); return; }
     doFetch(1);
   }
 
@@ -778,6 +840,21 @@
     }
   }
 
+  function wireSoon() {
+    var f = $("yanzFeatureTrace"), m = $("yanzSoonModal");
+    var close = $("yanzSoonClose"), join = $("yanzSoonJoin");
+    function open() { if (m) { m.classList.add("is-show"); m.setAttribute("aria-hidden", "false"); } }
+    function hide() { if (m) { m.classList.remove("is-show"); m.setAttribute("aria-hidden", "true"); } }
+    if (f) f.onclick = open;
+    if (close) close.onclick = hide;
+    if (join) join.onclick = function () { window.open(CHANNEL, "_blank", "noopener,noreferrer"); };
+    if (m) m.addEventListener("click", function (e) { if (e.target === m) hide(); });
+    if (!window.__yanzSoonEsc) {
+      window.__yanzSoonEsc = true;
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape") hide(); });
+    }
+  }
+
   function wire() {
     var urlTab = $("yanzTabUrl");
     var capTab = $("yanzTabCaption");
@@ -786,6 +863,7 @@
     if (urlTab) urlTab.onclick = function () { setMode("url"); };
     if (capTab) capTab.onclick = function () { setMode("caption"); };
     if (btn) btn.onclick = searchVideos;
+    wireSoon();
     if (input) input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") searchVideos();
     });

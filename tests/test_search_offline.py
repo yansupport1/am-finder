@@ -1,5 +1,5 @@
 """Uji offline api/search.py (tanpa internet): python3 -m unittest tests/test_search_offline.py -v"""
-import importlib.util, os, time, unittest
+import importlib.util, json, os, time, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("amf_search", os.path.join(HERE, "..", "api", "search.py"))
@@ -30,6 +30,7 @@ class Env:
 class T(unittest.TestCase):
     def setUp(self):
         S._CACHE.clear()
+        S._ENGINE_COOL.clear()
         os.environ["SEARCH_BUDGET"] = "8"
         self.orig = S.fetch
 
@@ -122,6 +123,78 @@ class T(unittest.TestCase):
         self.assertEqual(r["count"], 0)
         self.assertIn(r["status"], ("blocked", "unreachable"))
 
+
+    # --- layer tikwm + circuit breaker ---
+    def _tw(self, n, titles=None):
+        vids = []
+        for i in range(n):
+            vids.append({"video_id": "73123456789012345%02d" % i, "title": (titles or {}).get(i, "cap %d" % i),
+                         "cover": "https://p16.tiktokcdn.com/c%d.jpg" % i, "play": "https://www.tikwm.com/video/media/play/x.mp4",
+                         "author": {"unique_id": "user%d" % i}, "play_count": 1000 * (i + 1), "digg_count": 50, "comment_count": 5,
+                         "share_count": 1, "create_time": 1700000000})
+        return json.dumps({"code": 0, "msg": "success", "data": {"videos": vids}})
+
+    def test_tikwm_gives_full_items_without_scraping(self):
+        engine_hits = {"n": 0}
+
+        def h(url, kw):
+            if "tikwm.com" in url:
+                return S.Resp(200, self._tw(8, {5: "Negoro angin preset https://alight.link/zz"}), url, None)
+            engine_hits["n"] += 1
+            return S.Resp(202, "anomaly-modal", url, "http 202")
+        S.fetch = Env(h)
+        r = S.run_search("negoro angin")
+        self.assertEqual((r["status"], r["count"]), ("ok", 8))
+        self.assertEqual(engine_hits["n"], 0)            # >=6 hasil -> mesin pencari tidak disentuh
+        self.assertEqual(r["results"][0]["author"], "user5")      # caption cocok + ada link preset naik ke atas
+        self.assertTrue(r["results"][0]["presetLinks"])
+        it = r["results"][1]
+        self.assertTrue(it["cover"] and it["stats"]["views"] and it["videoUrl"].startswith("https://www.tiktok.com/@user"))
+        self.assertEqual(it["playUrl"], "")               # host tikwm tidak lewat proxy video
+
+    def test_tikwm_rate_limit_retry_then_ok(self):
+        n = {"c": 0}
+
+        def h(url, kw):
+            if "tikwm.com" in url:
+                n["c"] += 1
+                if n["c"] == 1:
+                    return S.Resp(200, json.dumps({"code": -1, "msg": "Free Api Limit: 1 request/second."}), url, None)
+                return S.Resp(200, self._tw(7), url, None)
+            return S.Resp(202, "anomaly-modal", url, "http 202")
+        S.fetch = Env(h)
+        r = S.run_search("kata")
+        self.assertEqual(r["count"], 7)
+        self.assertEqual(n["c"], 2)
+
+    def test_tikwm_disabled_by_env(self):
+        os.environ["TIKWM_ENABLED"] = "0"
+        try:
+            seen = []
+            S.fetch = Env(lambda url, kw: (seen.append(url), S.Resp(202, "anomaly-modal", url, "http 202"))[1])
+            S.run_search("x")
+            self.assertFalse([u for u in seen if "tikwm.com" in u])
+        finally:
+            os.environ.pop("TIKWM_ENABLED", None)
+
+    def test_circuit_breaker_limits_requests_on_second_search(self):
+        os.environ["TIKWM_ENABLED"] = "0"
+        try:
+            hosts = []
+
+            def h(url, kw):
+                hosts.append(url.split("/")[2])
+                return S.Resp(202, "anomaly-modal", url, "http 202")
+            S.fetch = Env(h)
+            S.run_search("pertama")
+            first = set(hosts); hosts[:] = []
+            r2 = S.run_search("kedua")
+            self.assertGreaterEqual(len(first), 5)             # putaran 1: semua mesin dicoba
+            self.assertLessEqual(len(set(hosts)), 3)           # putaran 2: mesin yang diblok diistirahatkan
+            self.assertGreaterEqual(len(set(hosts)), 1)        # tapi tidak pernah berhenti total
+            self.assertEqual(r2["status"], "blocked")
+        finally:
+            os.environ.pop("TIKWM_ENABLED", None)
 
 if __name__ == "__main__":
     unittest.main()

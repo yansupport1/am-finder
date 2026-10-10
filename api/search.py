@@ -28,6 +28,8 @@ Env opsional:
   RAPIDAPI_QUERY_PARAM default keywords
   GOOGLE_CSE_KEY + GOOGLE_CSE_CX   Google Programmable Search (gratis 100 query/hari)
   BRAVE_API_KEY                    Brave Search API
+  TIKWM_ENABLED        default 1. Layer pencarian video via API publik pihak ketiga
+                       (tikwm.com, batas gratis 1 request/detik). Set 0 untuk mematikan.
 """
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, quote, unquote, urlencode
@@ -300,8 +302,12 @@ def fmt_num(n):
     return str(n)
 
 
+_PLAY_OK = re.compile(r"https?://(?:[\w.-]+\.)?(?:tiktokcdn|tiktokv|musical\.ly|byteoversea|ibytedtos|tiktok)\.", re.I)
+
+
 def proxy_play(url):
-    if not url or not str(url).startswith("http"):
+    """Hanya host yang diizinkan /api/video; selain itu kosong (UI memakai pemutar embed)."""
+    if not url or not _PLAY_OK.match(str(url)):
         return ""
     return "/api/video?url=" + quote(url, safe="")
 
@@ -441,6 +447,70 @@ def keyed_search(q, deadline):
 
 
 # ---------------------------------------------------------------------------
+# Layer 0c: pencarian video TikTok lewat API publik pihak ketiga (tikwm.com).
+# Mengembalikan hasil pencarian TikTok asli per kata kunci (caption, author, cover,
+# statistik) dalam 1 request, jadi jauh lebih akurat & ringan daripada scraping
+# banyak mesin pencari. Bukan API resmi TikTok: bisa berubah/dibatasi sewaktu-waktu;
+# kalau gagal, layer berikutnya tetap jalan. Matikan dengan TIKWM_ENABLED=0.
+# Belum diuji ke server asli (hanya lewat data tiruan).
+# ---------------------------------------------------------------------------
+def tikwm_search(q, deadline):
+    """Return (items, reachable). reachable=True bila server menjawab sukses (walau 0 video)."""
+    if (os.environ.get("TIKWM_ENABLED", "1") or "1").strip() == "0":
+        return [], False
+    for attempt in range(3):
+        left = deadline - time.time()
+        if left < 1.5:
+            break
+        r = fetch("https://www.tikwm.com/api/feed/search", timeout=min(9.0, left),
+                  referer="https://www.tikwm.com/", headers={"Accept": "application/json"},
+                  data={"keywords": q, "count": 20, "cursor": 0, "HD": 1})
+        if r.status in (429, 503):
+            time.sleep(min(1.2, max(0.0, deadline - time.time() - 1.5)))
+            continue
+        if r.status != 200:
+            break
+        try:
+            j = json.loads(r.text)
+        except Exception:
+            break
+        if j.get("code") == 0:
+            found = {}
+            _harvest((j.get("data") or {}).get("videos") or [], found)
+            return list(found.values()), True
+        if "limit" in str(j.get("msg") or "").lower():   # batas 1 request/detik
+            time.sleep(min(1.2, max(0.0, deadline - time.time() - 1.5)))
+            continue
+        break
+    return [], False
+
+
+# Circuit breaker per mesin: mesin yang baru saja diblok diistirahatkan sebentar supaya
+# IP server tidak terus-terusan "dipukul" (itulah yang membuat pencarian kedua gagal).
+_ENGINE_COOL = {}
+_COOL_LOCK = threading.Lock()
+COOLDOWN = 45.0
+
+
+def pick_engines(min_count=3):
+    now = time.time()
+    with _COOL_LOCK:
+        ready = [e for e in ENGINES if _ENGINE_COOL.get(e[0], 0) <= now]
+        if len(ready) < min_count:   # half-open: selalu coba minimal beberapa mesin
+            rest = sorted([e for e in ENGINES if e not in ready], key=lambda e: _ENGINE_COOL.get(e[0], 0))
+            ready += rest[: min_count - len(ready)]
+    return ready
+
+
+def _mark_engine(name, kind):
+    with _COOL_LOCK:
+        if kind == "blocked":
+            _ENGINE_COOL[name] = time.time() + COOLDOWN
+        elif kind == "ok":
+            _ENGINE_COOL.pop(name, None)
+
+
+# ---------------------------------------------------------------------------
 # Layer 1-3: discovery lewat indeks publik (paralel, dengan deadline)
 # ---------------------------------------------------------------------------
 def _eng_ddg_html(q):
@@ -503,6 +573,7 @@ def _engine_worker(name, build, variants, deadline, sink, health, lock):
             r = fetch(url, ua=ua, timeout=min(7.0, remaining), referer=ref, data=data)
             found = extract_tiktok_urls(r.text, pairs=pairs) if r.text else []
             kind = classify(r, bool(found))
+            _mark_engine(name, kind)
             with lock:
                 for vid, canon, author in found:
                     sink.setdefault(vid, (canon, author))
@@ -519,8 +590,9 @@ def _engine_worker(name, build, variants, deadline, sink, health, lock):
 
 def discover(q, round_no, deadline, sink, health, lock):
     variants = query_variants(q, round_no)
-    ex = ThreadPoolExecutor(max_workers=len(ENGINES))
-    futs = [ex.submit(_engine_worker, n, b, variants, deadline, sink, health, lock) for n, b in ENGINES]
+    engines = pick_engines()
+    ex = ThreadPoolExecutor(max_workers=len(engines))
+    futs = [ex.submit(_engine_worker, n, b, variants, deadline, sink, health, lock) for n, b in engines]
     start = time.time()
     while True:
         if all(f.done() for f in futs):
@@ -727,6 +799,8 @@ def relevance(item, q):
         s += int(80 * sum(1 for t in toks if t in d) / float(len(toks)))
     if item.get("presetLinks"):
         s += 50
+    if re.search(r"preset|alight|\bam\b|xml|shake|template", d):
+        s += 15
     if item.get("cover"):
         s += 5
     v = (item.get("stats") or {}).get("views")
@@ -770,40 +844,60 @@ def run_search(raw_q):
                      None if res else MSG_EMPTY, time.time() - t0)
 
     B = budget()
-    t_r1, t_r2, t_end = t0 + B * 0.50, t0 + B * 0.70, t0 + B * 0.92
+    t_api, t_r1, t_r2, t_end = t0 + B * 0.40, t0 + B * 0.55, t0 + B * 0.72, t0 + B * 0.92
     health = {"ok": 0, "blocked": 0, "error": 0}
-    results, source = [], ""
+    parts = []
+    items = {}   # vid -> data lengkap dari API (tanpa perlu enrich)
 
-    # Layer 0: RapidAPI (opsional)
+    # Layer 0: RapidAPI (opsional, bila key ada)
     try:
-        api_items = rapidapi_search(q, t0 + B * 0.5)
+        for it in rapidapi_search(q, t_api):
+            items.setdefault(it["id"], it)
+        if items:
+            parts.append("rapidapi")
     except Exception:
-        api_items = []
-    if api_items:
-        results = rank([make_item(i["id"], "", i["author"], i) for i in api_items], q)
-        source = "rapidapi"
+        pass
 
-    # Layer 1-3: API resmi (bila key ada) lalu mesin pencari publik, paralel + putaran ke-2
-    if not results:
+    # Layer 0c: API publik pihak ketiga (1 request, hasil TikTok asli)
+    if len(items) < 6:
+        try:
+            tw, reach = tikwm_search(q, t_api)
+        except Exception:
+            tw, reach = [], False
+        if reach:
+            health["ok"] += 1
+        if tw:
+            parts.append("tikwm")
+        for it in tw:
+            items.setdefault(it["id"], it)
+
+    results = [make_item(i["id"], "", i["author"], i) for i in items.values()]
+
+    # Layer 1-3: API resmi bila key ada, lalu mesin pencari publik (hanya bila hasil masih sedikit)
+    if len(results) < 6:
         sink, lock = {}, threading.Lock()
         try:
-            kfound, kreach, kname = keyed_search(q, t0 + B * 0.45)
+            kfound, kreach, kname = keyed_search(q, t_api)
         except Exception:
             kfound, kreach, kname = {}, False, ""
         if kreach:
             health["ok"] += 1
         sink.update(kfound)
         if kfound:
-            source = kname
-        if len(sink) < 6:
+            parts.append(kname)
+        if len(sink) + len(results) < 6:
             discover(q, 1, t_r1, sink, health, lock)
-        if not sink and time.time() < t_r2 - 3.0:
+        if not sink and not results and time.time() < t_r2 - 3.0:
             time.sleep(min(1.5, max(0.0, t_r2 - time.time() - 3.0)))
             discover(q, 2, t_r2, sink, health, lock)
-        cands = list(sink.items())[:16]
+        cands = [(v, ca) for v, ca in sink.items() if v not in items][:16]
         if cands:
-            results = rank(enrich_all(cands, t_end), q)
-            source = source or "search-engine"
+            results += enrich_all(cands, t_end)
+            if "search-engine" not in parts and not kfound:
+                parts.append("search-engine")
+
+    results = rank(results, q)
+    source = "+".join(parts)
 
     if results:
         status, msg = "ok", None
