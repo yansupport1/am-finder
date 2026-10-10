@@ -141,11 +141,55 @@ def classify(url, context=""):
 
 
 def resolve_url(url):
-    try:
-        final, _, _ = http_get(url, timeout=12, method="GET")
-        return final
-    except Exception:
+    """Resolve vt.tiktok.com / vm.tiktok.com short links to full @user/video/id URL."""
+    url = (url or "").strip()
+    if not url:
         return url
+    # already full?
+    if re.search(r"tiktok\.com/@[^/]+/video/\d+", url, re.I):
+        return url.split("?")[0].split("#")[0]
+
+    uas = [
+        UA,
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+    ]
+    last = url
+    for ua in uas:
+        try:
+            req = Request(
+                url,
+                headers={
+                    "User-Agent": ua,
+                    "Accept": "text/html,application/xhtml+xml,*/*",
+                    "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+                },
+                method="GET",
+            )
+            with urlopen(req, timeout=14) as resp:
+                final = resp.geturl()
+                body = resp.read().decode("utf-8", "ignore")
+            last = final or last
+            if re.search(r"tiktok\.com/@[^/]+/video/\d+", last, re.I):
+                return last.split("?")[0].split("#")[0]
+            # sometimes canonical in HTML
+            m = re.search(
+                r'https?://(?:www\.)?tiktok\.com/@[^/\s"\']+/video/\d+',
+                body,
+                re.I,
+            )
+            if m:
+                return m.group(0).split("?")[0]
+            m = re.search(
+                r'property="og:url"\s+content="(https?://[^"]+)"',
+                body,
+                re.I,
+            )
+            if m and "tiktok.com" in m.group(1):
+                return m.group(1).split("?")[0]
+        except Exception:
+            continue
+    return last.split("?")[0] if last else url
 
 
 def parse_video_id(url):
@@ -475,8 +519,6 @@ def scrape_tiktok(url):
             "cover": cover or "",
             "playUrl": (_proxy_url(play_url) if play_url else ""),
             "playUrlNoWm": (_proxy_url(play_url) if play_url else ""),
-            "id": video_id or "",
-            "embedUrl": (("https://www.tiktok.com/embed/v2/" + str(video_id)) if video_id else ""),
             "width": 576,
             "height": 1024,
             "stats": {

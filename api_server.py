@@ -491,20 +491,6 @@ async def api_track(request: Request):
     return {"ok": True}
 
 
-@app.get("/api/search")
-async def api_search(q: str = Query(..., min_length=1)):
-    """Dev lokal: pakai logika yang sama dengan api/search.py (Vercel)."""
-    import importlib.util, os
-    from fastapi.responses import JSONResponse
-    from starlette.concurrency import run_in_threadpool
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "api", "search.py")
-    spec = importlib.util.spec_from_file_location("amf_search", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    data = await run_in_threadpool(mod.run_search, q)
-    return JSONResponse(data, headers={"Cache-Control": "no-store"})
-
-
 @app.get("/api/health")
 async def health():
     return {"ok": True, "by": "Yanz"}
