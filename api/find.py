@@ -475,6 +475,8 @@ def scrape_tiktok(url):
             "cover": cover or "",
             "playUrl": (_proxy_url(play_url) if play_url else ""),
             "playUrlNoWm": (_proxy_url(play_url) if play_url else ""),
+            "id": video_id or "",
+            "embedUrl": (("https://www.tiktok.com/embed/v2/" + str(video_id)) if video_id else ""),
             "width": 576,
             "height": 1024,
             "stats": {

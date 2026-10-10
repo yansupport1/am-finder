@@ -26,6 +26,8 @@ Env opsional:
   RAPIDAPI_HOST        default tiktok-scraper7.p.rapidapi.com
   RAPIDAPI_SEARCH_PATH default /feed/search
   RAPIDAPI_QUERY_PARAM default keywords
+  GOOGLE_CSE_KEY + GOOGLE_CSE_CX   Google Programmable Search (gratis 100 query/hari)
+  BRAVE_API_KEY                    Brave Search API
 """
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, quote, unquote, urlencode
@@ -393,6 +395,52 @@ def rapidapi_search(q, deadline):
 
 
 # ---------------------------------------------------------------------------
+# Layer 0b (opsional): API pencarian resmi. Tidak diblok seperti scraping HTML.
+#   GOOGLE_CSE_KEY + GOOGLE_CSE_CX : Google Programmable Search (JSON API)
+#   BRAVE_API_KEY                  : Brave Search API
+# Belum diuji dengan key asli (lihat tes mock); kalau gagal, lanjut ke layer berikutnya.
+# ---------------------------------------------------------------------------
+def keyed_search(q, deadline):
+    """Return (found: dict vid->(canon, author), reachable: bool, name: str)."""
+    found, reachable, names = {}, False, []
+    gk = (os.environ.get("GOOGLE_CSE_KEY") or "").strip()
+    gx = (os.environ.get("GOOGLE_CSE_CX") or "").strip()
+    bk = (os.environ.get("BRAVE_API_KEY") or "").strip()
+
+    def add_links(links):
+        for lk in links:
+            for vid, canon, author in extract_tiktok_urls(str(lk or "")):
+                found.setdefault(vid, (canon, author))
+
+    if gk and gx and deadline - time.time() > 1.0:
+        r = fetch("https://www.googleapis.com/customsearch/v1?" + urlencode(
+            {"key": gk, "cx": gx, "q": q + " tiktok video", "siteSearch": "tiktok.com", "num": 10}),
+            timeout=min(8.0, deadline - time.time()))
+        if r.status == 200:
+            reachable = True
+            names.append("google-cse")
+            try:
+                items = json.loads(r.text).get("items") or []
+                add_links([it.get("link") for it in items] + [it.get("formattedUrl") for it in items])
+            except Exception:
+                pass
+    if bk and deadline - time.time() > 1.0:
+        r = fetch("https://api.search.brave.com/res/v1/web/search?" + urlencode(
+            {"q": "site:tiktok.com " + q, "count": 20}),
+            timeout=min(8.0, deadline - time.time()),
+            headers={"X-Subscription-Token": bk, "Accept": "application/json"})
+        if r.status == 200:
+            reachable = True
+            names.append("brave-api")
+            try:
+                res = (json.loads(r.text).get("web") or {}).get("results") or []
+                add_links([it.get("url") for it in res])
+            except Exception:
+                pass
+    return found, reachable, "+".join(names)
+
+
+# ---------------------------------------------------------------------------
 # Layer 1-3: discovery lewat indeks publik (paralel, dengan deadline)
 # ---------------------------------------------------------------------------
 def _eng_ddg_html(q):
@@ -735,17 +783,27 @@ def run_search(raw_q):
         results = rank([make_item(i["id"], "", i["author"], i) for i in api_items], q)
         source = "rapidapi"
 
-    # Layer 1-3: mesin pencari publik, paralel + putaran ke-2 bila kosong
+    # Layer 1-3: API resmi (bila key ada) lalu mesin pencari publik, paralel + putaran ke-2
     if not results:
         sink, lock = {}, threading.Lock()
-        discover(q, 1, t_r1, sink, health, lock)
+        try:
+            kfound, kreach, kname = keyed_search(q, t0 + B * 0.45)
+        except Exception:
+            kfound, kreach, kname = {}, False, ""
+        if kreach:
+            health["ok"] += 1
+        sink.update(kfound)
+        if kfound:
+            source = kname
+        if len(sink) < 6:
+            discover(q, 1, t_r1, sink, health, lock)
         if not sink and time.time() < t_r2 - 3.0:
             time.sleep(min(1.5, max(0.0, t_r2 - time.time() - 3.0)))
             discover(q, 2, t_r2, sink, health, lock)
         cands = list(sink.items())[:16]
         if cands:
             results = rank(enrich_all(cands, t_end), q)
-            source = "search-engine"
+            source = source or "search-engine"
 
     if results:
         status, msg = "ok", None
