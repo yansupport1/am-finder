@@ -189,15 +189,17 @@
 
   function runPercent(elId, durationMs, onDone) {
     var el = $(elId);
+    if (el) el.textContent = "1%";
     var start = Date.now();
     var timer = setInterval(function () {
-      var p = Math.min(100, Math.floor(((Date.now() - start) / durationMs) * 100));
+      var p = Math.min(100, Math.max(1, Math.floor(((Date.now() - start) / durationMs) * 100)));
       if (el) el.textContent = p + "%";
       if (p >= 100) {
         clearInterval(timer);
+        if (el) el.textContent = "100%";
         if (onDone) onDone();
       }
-    }, 80);
+    }, 50);
     return timer;
   }
 
@@ -314,6 +316,7 @@
           '<button type="button" class="yanz-tab is-active" id="yanzTabUrl">Cari via Link Video</button>' +
           '<button type="button" class="yanz-tab" id="yanzTabCaption">Cari via Nama Lagu / Kata</button>' +
         '</div>' +
+        '<button type="button" class="yanz-trace-btn" id="yanzTraceBtn">Auto Trace Vektor <span class="yanz-soon">Coming soon</span></button>' +
         '<div class="yanz-caption-panel" id="yanzCaptionPanel">' +
           '<div class="yanz-caption-box">' +
             '<h2 class="yanz-caption-title">Cari video, lalu pilih untuk ambil preset</h2>' +
@@ -587,18 +590,20 @@
       }, wait);
     }
     function doFetch(attempt) {
-      fetch("/api/search?q=" + encodeURIComponent(q) + "&_=" + Date.now())
+      // cache-bust + attempt agar request tidak dianggap sama
+      var url = "/api/search?q=" + encodeURIComponent(q) + "&try=" + attempt + "&_=" + Date.now();
+      fetch(url)
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          if ((!data.results || !data.results.length) && attempt < 2) {
-            setTimeout(function () { doFetch(attempt + 1); }, 1200);
+          if ((!data.results || !data.results.length) && attempt < 3) {
+            setTimeout(function () { doFetch(attempt + 1); }, 1500 * attempt);
             return;
           }
           finish(data);
         })
         .catch(function () {
-          if (attempt < 2) {
-            setTimeout(function () { doFetch(attempt + 1); }, 1200);
+          if (attempt < 3) {
+            setTimeout(function () { doFetch(attempt + 1); }, 1500 * attempt);
             return;
           }
           finish({ results: [], message: "Yah, tidak ada videonya" });
@@ -663,6 +668,15 @@
     });
     setMode("url");
     fillSongTemplates();
+
+    var traceBtn = $("yanzTraceBtn");
+    if (traceBtn && !traceBtn.getAttribute("data-wired")) {
+      traceBtn.setAttribute("data-wired", "1");
+      traceBtn.onclick = function () {
+        alert("Auto Trace Vektor — Coming soon.\nFitur ini akan aktif setelah update berikutnya.");
+      };
+    }
+
     wireUrlSearchOverlay();
   }
 
@@ -670,6 +684,15 @@
     injectOnce();
     placeChrome();
     fillSongTemplates();
+
+    var traceBtn = $("yanzTraceBtn");
+    if (traceBtn && !traceBtn.getAttribute("data-wired")) {
+      traceBtn.setAttribute("data-wired", "1");
+      traceBtn.onclick = function () {
+        alert("Auto Trace Vektor — Coming soon.\nFitur ini akan aktif setelah update berikutnya.");
+      };
+    }
+
     ensurePromo();
     ensureClock();
     wireUrlSearchOverlay();

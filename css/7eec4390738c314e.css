@@ -815,3 +815,46 @@ body {
 .yanz-song-chip:active {
   transform: scale(0.96);
 }
+
+.yanz-trace-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: rgba(241,245,249,0.85);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  transition: transform 0.2s, border-color 0.2s, background 0.2s;
+}
+.yanz-trace-btn:hover {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.1);
+  transform: translateY(-1px);
+}
+.yanz-trace-btn:active { transform: scale(0.98); }
+.yanz-soon {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #020617;
+  background: linear-gradient(135deg, #c4b5fd, #67e8f9);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.yanz-loader-pct {
+  font-size: 28px !important;
+  font-weight: 900 !important;
+  color: #5eead4 !important;
+  min-height: 34px;
+}

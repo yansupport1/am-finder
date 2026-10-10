@@ -22,7 +22,7 @@ UA_MOBILE = (
 
 # simple process cache (helps 2nd same query on warm instance)
 _CACHE = {}
-_CACHE_TTL = 120  # seconds
+_CACHE_TTL = 45  # seconds
 
 AM_PATTERNS = [
     re.compile(r"https?://(?:www\.)?alightcreative\.com/am/share/[^\s\"'<>]+", re.I),
@@ -315,13 +315,20 @@ def discover(query):
         return []
 
     variants = [
+        q,
         f"{q} tiktok",
-        f"{q} preset tiktok",
-        f"{q} #preset tiktok",
-        f"{q} alight motion tiktok",
-        f'site:tiktok.com/video {q}',
-        f'site:tiktok.com {q}',
-        f'"{q}" site:tiktok.com',
+        f"{q} preset",
+        f"{q} #preset",
+        f"{q} #presetam",
+        f"{q} #alightmotion",
+        f"{q} #ampreset",
+        f"{q} #presetxml",
+        f"{q} alight motion",
+        f"{q} preset am",
+        f'site:tiktok.com {q} #preset',
+        f'site:tiktok.com/video {q} preset',
+        f'"{q}" #preset tiktok',
+        f'"{q}" alightmotion',
     ]
 
     def pull(html):
@@ -357,7 +364,7 @@ def discover(query):
                 pull(html)
             except Exception:
                 pass
-        if len(urls) >= 8:
+        if len(urls) >= 15:
             break
 
     # 2) Bing
@@ -422,17 +429,8 @@ def search_own(query):
     if not q:
         return []
 
-    key = q.lower()
-    now = time.time()
-    # Hanya pakai cache jika ADA hasil (supaya search bisa diulang terus)
-    if key in _CACHE:
-        ts, cached = _CACHE[key]
-        if cached and (now - ts) < _CACHE_TTL:
-            return [dict(x) for x in cached]  # copy
-        # hapus cache kosong / expired
-        if not cached or (now - ts) >= _CACHE_TTL:
-            _CACHE.pop(key, None)
-
+    # Cache dimatikan: setiap request selalu discover ulang
+    # (cache bikin "sekali bisa, lalu kosong" di IP yang di-rate-limit)
     candidates = discover(q)
     if not candidates:
         simple = re.sub(r"[#@]+", " ", q).strip()
@@ -530,8 +528,6 @@ def search_own(query):
         r.pop("_match", None)
 
     out = results[:15]
-    if out:
-        _CACHE[key] = (time.time(), out)
     return out
 
 
