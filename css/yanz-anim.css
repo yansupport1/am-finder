@@ -206,3 +206,5 @@ body.mode-caption .yanz-searching.is-show .yz-dots { display: inline-flex !impor
 .yz-soon-btn { flex: 1; min-height: 44px; border: 0; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; }
 .yz-soon-close { color: #cbd5e1; background: rgba(255,255,255,.08); }
 .yz-soon-join { color: #020617; background: linear-gradient(135deg, #5eead4, #38bdf8); }
+
+.yz-ver { position: relative; z-index: 1; font-size: 11px; letter-spacing: .06em; color: rgba(148,163,184,.7); }

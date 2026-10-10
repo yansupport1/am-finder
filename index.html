@@ -140,6 +140,7 @@
 <script>
 (function () {
   window.__yanzT0 = window.__yanzT0 || Date.now();
+  try { console.info("[yanz] AM Preset Finder UI v3.1 (10 Okt 2026)"); document.documentElement.setAttribute("data-yanz-ver", "3.1"); } catch (e) {}
   var ICON = "images/icon-192.png";
   var FAV = "images/favicon-48x48.png";
   var CHANNEL = "https://whatsapp.com/channel/0029VbClbeZDJ6GujGMyQ53T";
@@ -270,6 +271,7 @@
         '<div class="yanz-loader-pct" id="yanzLoaderPct">0%</div>' +
         '<div class="yz-loadbar"><i id="yanzLoaderBar"></i></div>' +
         '<div class="yz-loadtip" id="yanzLoaderTip">Menyiapkan mesin pencari preset…</div>' +
+        '<div class="yz-ver">v3.1 · 10 Okt 2026</div>' +
       '</div>' +
       '<div class="yanz-chrome" id="yanzChrome">' +
         '<div class="yanz-tabs" id="yanzTabs">' +
@@ -872,6 +874,7 @@ runLoader();
   }
 
   function boot() {
+    try { document.documentElement.setAttribute("data-yanz-ver", "3.1"); } catch (e) {}
     injectOnce();
     placeChrome();
     ensurePromo();
@@ -881,6 +884,16 @@ runLoader();
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
+  // React kadang me-render ulang seluruh dokumen (hydration) dan menghapus UI kita:
+  // pulihkan seketika, bukan menunggu timer.
+  try {
+    var rebootT = null;
+    new MutationObserver(function () {
+      if ($("yanzRoot")) return;
+      clearTimeout(rebootT);
+      rebootT = setTimeout(boot, 20);
+    }).observe(document, { childList: true, subtree: true });
+  } catch (e) {}
   setTimeout(boot, 300);
   setTimeout(boot, 1000);
   setTimeout(boot, 2500);
