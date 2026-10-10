@@ -363,18 +363,29 @@
     if (!data || !data.results || !data.results.length) {
       var q = ($("yanzCaptionInput") && $("yanzCaptionInput").value) || "";
       var ttSearch = "https://www.tiktok.com/search/video?q=" + encodeURIComponent(q);
+      var emsg = (data && data.message) ||
+        "Belum ketemu video otomatis (TikTok sering membatasi server). Coba salin link video dari TikTok lalu tempel di tab Cari via Link Video.";
       box.innerHTML =
         '<div class="yanz-empty">' +
-        '<p>Belum ketemu video otomatis (TikTok sering membatasi server).</p>' +
-        '<p style="margin-top:8px">Coba buka pencarian TikTok, salin link video, lalu tempel di tab <b>Cari via Link Video</b>.</p>' +
+        '<p>' + esc(emsg) + '</p>' +
+        '<p style="margin-top:12px"><button type="button" class="yanz-pick-btn" id="yanzGoUrlTab">Buka tab Cari via Link Video</button></p>' +
         '<p style="margin-top:12px"><a class="yanz-result-open" href="' + esc(ttSearch) + '" target="_blank" rel="noopener">Buka pencarian di TikTok</a></p>' +
         "</div>";
+      var goTab = $("yanzGoUrlTab");
+      if (goTab) goTab.onclick = function () { setMode("url"); };
       return;
     }
     var title = document.createElement("div");
     title.className = "yanz-step-title";
     title.textContent = "Pilih video di bawah, lalu kami cari link preset-nya";
     box.appendChild(title);
+    if (data.message) {
+      var note = document.createElement("div");
+      note.className = "yanz-empty";
+      note.style.marginBottom = "10px";
+      note.textContent = data.message;
+      box.appendChild(note);
+    }
 
     data.results.forEach(function (r, idx) {
       var div = document.createElement("div");
@@ -544,21 +555,25 @@
       }, wait);
     }
     function doFetch(attempt) {
-      fetch("/api/search?q=" + encodeURIComponent(q) + "&_=" + Date.now())
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if ((!data.results || !data.results.length) && attempt < 2) {
-            setTimeout(function () { doFetch(attempt + 1); }, 1200);
-            return;
-          }
+      // Tidak auto-retry saat server menjawab kosong/diblok (itu justru memperparah blokir).
+      // Retry hanya bila koneksi putus / respons bukan JSON (mis. timeout platform).
+      fetch("/api/search?q=" + encodeURIComponent(q), { cache: "no-store" })
+        .then(function (r) { return r.text(); })
+        .then(function (txt) {
+          var data = null;
+          try { data = JSON.parse(txt); } catch (e) {}
+          if (!data) throw new Error("bad-json");
           finish(data);
         })
         .catch(function () {
           if (attempt < 2) {
-            setTimeout(function () { doFetch(attempt + 1); }, 1200);
+            setTimeout(function () { doFetch(attempt + 1); }, 2500);
             return;
           }
-          finish({ results: [], message: "Yah, tidak ada videonya" });
+          finish({
+            results: [],
+            message: "Koneksi ke server pencarian terputus atau terlalu lama. Coba lagi sebentar lagi, atau pakai tab Cari via Link Video."
+          });
         });
     }
     doFetch(1);
