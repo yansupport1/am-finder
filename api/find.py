@@ -7,7 +7,10 @@ SSE event "result" with JSON { ok, presetLinks, video, author, ... }
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote, quote
 import json
+import os
 import re
+import threading
+import time
 import traceback
 
 try:
@@ -57,7 +60,26 @@ PRESET_HINT = re.compile(
 )
 
 
+# Batas waktu TOTAL per request /api/find (detik). Log produksi menunjukkan satu scan pernah
+# menggantung 300 dtk ("Task timed out after 300 seconds"): urlopen(timeout=...) hanya membatasi
+# tiap operasi socket, bukan total, jadi respons yang menetes pelan bisa menahan fungsi sangat lama.
+FIND_BUDGET = float(os.environ.get("FIND_BUDGET", "60"))
+_tl = threading.local()   # per-thread: aman bila beberapa request jalan bersamaan di satu instance
+
+
+def _remaining():
+    d = getattr(_tl, "deadline", None)
+    return None if d is None else d - time.time()
+
+
 def http_get(url, timeout=18, method="GET"):
+    rem = _remaining()
+    if rem is not None:
+        if rem <= 1.0:
+            raise TimeoutError("scan melewati batas waktu")
+        timeout = min(timeout, rem)
+    started = time.time()
+    hard = timeout * 1.5 + 2          # batas total termasuk membaca body
     req = Request(
         url,
         headers={
@@ -69,13 +91,23 @@ def http_get(url, timeout=18, method="GET"):
     )
     with urlopen(req, timeout=timeout) as resp:
         final = resp.geturl()
-        body = resp.read()
+        chunks, size = [], 0
+        while True:
+            chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+            if size > 4000000:
+                break
+            if time.time() - started > hard:
+                raise TimeoutError("respons terlalu lambat")
+        body = b"".join(chunks)
         try:
             text = body.decode("utf-8", errors="replace")
         except Exception:
             text = body.decode("latin-1", errors="replace")
         return final, text, resp.status
-
 
 
 def extract_all_http(text):
@@ -141,55 +173,11 @@ def classify(url, context=""):
 
 
 def resolve_url(url):
-    """Resolve vt.tiktok.com / vm.tiktok.com short links to full @user/video/id URL."""
-    url = (url or "").strip()
-    if not url:
+    try:
+        final, _, _ = http_get(url, timeout=12, method="GET")
+        return final
+    except Exception:
         return url
-    # already full?
-    if re.search(r"tiktok\.com/@[^/]+/video/\d+", url, re.I):
-        return url.split("?")[0].split("#")[0]
-
-    uas = [
-        UA,
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-        "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
-    ]
-    last = url
-    for ua in uas:
-        try:
-            req = Request(
-                url,
-                headers={
-                    "User-Agent": ua,
-                    "Accept": "text/html,application/xhtml+xml,*/*",
-                    "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
-                },
-                method="GET",
-            )
-            with urlopen(req, timeout=14) as resp:
-                final = resp.geturl()
-                body = resp.read().decode("utf-8", "ignore")
-            last = final or last
-            if re.search(r"tiktok\.com/@[^/]+/video/\d+", last, re.I):
-                return last.split("?")[0].split("#")[0]
-            # sometimes canonical in HTML
-            m = re.search(
-                r'https?://(?:www\.)?tiktok\.com/@[^/\s"\']+/video/\d+',
-                body,
-                re.I,
-            )
-            if m:
-                return m.group(0).split("?")[0]
-            m = re.search(
-                r'property="og:url"\s+content="(https?://[^"]+)"',
-                body,
-                re.I,
-            )
-            if m and "tiktok.com" in m.group(1):
-                return m.group(1).split("?")[0]
-        except Exception:
-            continue
-    return last.split("?")[0] if last else url
 
 
 def parse_video_id(url):
@@ -519,6 +507,8 @@ def scrape_tiktok(url):
             "cover": cover or "",
             "playUrl": (_proxy_url(play_url) if play_url else ""),
             "playUrlNoWm": (_proxy_url(play_url) if play_url else ""),
+            "id": video_id or "",
+            "embedUrl": (("https://www.tiktok.com/embed/v2/" + str(video_id)) if video_id else ""),
             "width": 576,
             "height": 1024,
             "stats": {
@@ -574,6 +564,7 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
+            _tl.deadline = time.time() + FIND_BUDGET
             result = scrape_tiktok(url)
             self.wfile.write(sse("result", result).encode())
         except Exception as e:
