@@ -208,3 +208,26 @@ body.mode-caption .yanz-searching.is-show .yz-dots { display: inline-flex !impor
 .yz-soon-join { color: #020617; background: linear-gradient(135deg, #5eead4, #38bdf8); }
 
 .yz-ver { position: relative; z-index: 1; font-size: 11px; letter-spacing: .06em; color: rgba(148,163,184,.7); }
+
+/* ==========================================================================
+   Dua tile fitur (Auto Trace Vektor + AM Premium Free) + mahkota animasi
+   ========================================================================== */
+@keyframes yzTwinkle { 0%,100% { transform: scale(.15) rotate(0); opacity: 0; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
+@keyframes yzGem     { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.8); } }
+@keyframes yzCrown   { 0%,100% { filter: drop-shadow(0 0 2px rgba(251,191,36,.4)); } 50% { filter: drop-shadow(0 0 9px rgba(251,191,36,.95)); } }
+.yz-features { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 10px; }
+.yz-features .yz-feature { flex-direction: column; align-items: center; text-align: center; margin: 0; padding: 12px 8px; gap: 6px; }
+.yz-features .yz-feature-ico { flex: 0 0 auto; width: 64px; height: 48px; }
+.yz-features .yz-feature-txt { align-items: center; }
+.yz-features .yz-feature-txt b { font-size: 13px; }
+.yz-features .yz-feature-txt small { font-size: 11px; }
+.yz-feature-ico svg { animation: yzFloat 3.2s ease-in-out infinite; }
+#yanzFeaturePremium { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.06); }
+#yanzFeaturePremium:hover { border-color: rgba(251,191,36,.9); background: rgba(251,191,36,.11); }
+.yz-crown { fill: url(#yzGold); stroke: #fbbf24; stroke-width: 2; stroke-linejoin: round; animation: yzCrown 2.4s ease-in-out infinite; }
+.yz-crown-base { fill: url(#yzGold); }
+.yz-gem { fill: #38bdf8; animation: yzGem 1.8s ease-in-out infinite; }
+.yz-spark { fill: #fff; transform-box: fill-box; transform-origin: center; animation: yzTwinkle 1.9s ease-in-out infinite; }
+.yz-spark.s2 { animation-delay: .6s; } .yz-spark.s3 { animation-delay: 1.2s; }
+.yz-embed-link { display: block; text-align: center; margin-top: 8px; font-size: 12px; color: #5eead4; }
+.content-head > .yz-embed { align-self: flex-start; }

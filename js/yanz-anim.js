@@ -92,19 +92,29 @@
     return "";
   }
 
-  function useEmbed(v, why) {
-    if (!v || v.getAttribute("data-yz-embed")) return;
-    v.setAttribute("data-yz-embed", "1");
+  function buildEmbedHost() {
     var vid = currentVideoId();
     var host = document.createElement("div");
+    var link = String(window.__yanzLastUrl || (document.getElementById("tt") || {}).value || "https://www.tiktok.com/").replace(/"/g, "");
     if (vid) {
       host.className = "yz-embed";
       host.innerHTML = embedHTML(vid);
-    } else {
-      host.className = "yz-embed-note";
-      var link = (window.__yanzLastUrl || (document.getElementById("tt") || {}).value || "https://www.tiktok.com/");
-      host.innerHTML = 'Video tidak bisa diputar di sini. <a href="' + String(link).replace(/"/g, "") + '" target="_blank" rel="noopener" style="color:#5eead4">Buka di TikTok</a>';
+      var wrap = document.createElement("div");
+      wrap.appendChild(host);
+      var a = document.createElement("a");
+      a.className = "yz-embed-link"; a.target = "_blank"; a.rel = "noopener"; a.href = link; a.textContent = "Buka di TikTok";
+      wrap.appendChild(a);
+      return wrap;
     }
+    host.className = "yz-embed-note";
+    host.innerHTML = 'Video tidak bisa diputar di sini. <a href="' + link + '" target="_blank" rel="noopener" style="color:#5eead4">Buka di TikTok</a>';
+    return host;
+  }
+
+  function useEmbed(v, why) {
+    if (!v || v.getAttribute("data-yz-embed")) return;
+    v.setAttribute("data-yz-embed", "1");
+    var host = buildEmbedHost();
     var wrap = v.parentElement;
     if (wrap && !wrap.classList.contains("content-head") && wrap.tagName !== "MAIN") {
       wrap.style.display = "none";
@@ -114,6 +124,28 @@
       v.parentNode.insertBefore(host, v);
     }
     try { console.info("[yanz] embed fallback:", why); } catch (e) {}
+  }
+
+  // Komponen pemutar bawaan hilang total (return null) kalau tidak ada sumber video DAN tidak ada poster,
+  // sehingga di hasil tidak ada tampilan video sama sekali. Pastikan SELALU ada pemutar.
+  function ensurePlayer(why) {
+    var head = document.querySelector("main .content-head");
+    if (!head || head.querySelector(".yz-embed, .yz-embed-note")) return;
+    var v = head.querySelector("video");
+    if (v && (v.getAttribute("data-yz-ok") === "1")) return;
+    var good = v && (v.currentSrc || v.getAttribute("src")) && !v.error && v.readyState >= 1;
+    if (good) return;
+    var host = buildEmbedHost();
+    var preview = head.querySelector(".video-preview");
+    if (preview) preview.style.display = "none";
+    if (v) v.setAttribute("data-yz-embed", "1");
+    head.insertBefore(host, head.firstChild);
+    try { console.info("[yanz] player ensured:", why || ""); } catch (e) {}
+  }
+  var playerTimers = [];
+  function schedulePlayerCheck() {
+    playerTimers.forEach(clearTimeout); playerTimers = [];
+    [1200, 3000, 6500].forEach(function (ms) { playerTimers.push(setTimeout(function () { ensurePlayer("t" + ms); }, ms)); });
   }
 
   function watchVideo(v) {
@@ -138,6 +170,8 @@
           var ct = (r.headers.get("Content-Type") || "").toLowerCase();
           if (!(r.status === 200 || r.status === 206) || (ct && ct.indexOf("video") < 0 && ct.indexOf("octet") < 0)) {
             useEmbed(v, "probe status " + r.status);
+          } else {
+            v.setAttribute("data-yz-ok", "1");
           }
         }).catch(function () { useEmbed(v, "probe failed"); });
       } catch (e) {}
@@ -164,6 +198,7 @@
         if (!reduce) node.style.animationDelay = (Math.min(n, 8) * 60) + "ms";
         n++;
       }
+      if ((node.matches && node.matches(".video-meta, .content-head")) || (node.querySelector && node.querySelector(".video-meta"))) schedulePlayerCheck();
       var vids = node.tagName === "VIDEO" ? [node] : (node.querySelectorAll ? node.querySelectorAll("video") : []);
       Array.prototype.forEach.call(vids, watchVideo);
       var as = node.tagName === "A" ? [node] : (node.querySelectorAll ? node.querySelectorAll("a[href]") : []);
