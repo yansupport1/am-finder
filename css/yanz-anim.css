@@ -231,3 +231,34 @@ body.mode-caption .yanz-searching.is-show .yz-dots { display: inline-flex !impor
 .yz-spark.s2 { animation-delay: .6s; } .yz-spark.s3 { animation-delay: 1.2s; }
 .yz-embed-link { display: block; text-align: center; margin-top: 8px; font-size: 12px; color: #5eead4; }
 .content-head > .yz-embed { align-self: flex-start; }
+
+/* ---- Tile fitur diperkecil: tinggi & bentuk sama seperti tab "Cari via ..." ---- */
+.yz-features { gap: 8px; margin: 0 0 12px; }
+.yz-features .yz-feature {
+  display: grid; grid-template-columns: 34px 1fr; grid-template-areas: "ico txt" "ico badge";
+  column-gap: 8px; row-gap: 1px; align-items: center; justify-items: start; text-align: left;
+  min-height: 44px; padding: 6px 10px; border-radius: 14px;
+}
+.yz-features .yz-feature-ico { grid-area: ico; width: 34px; height: 26px; }
+.yz-features .yz-feature-txt { grid-area: txt; align-items: flex-start; min-width: 0; }
+.yz-features .yz-feature-txt b { font-size: 12px; line-height: 1.15; white-space: nowrap; }
+.yz-features .yz-feature-txt small { display: none; }
+.yz-features .yz-soon-badge { grid-area: badge; padding: 1px 7px; font-size: 8.5px; letter-spacing: .06em; line-height: 1.5; text-transform: uppercase; }
+
+/* ==========================================================================
+   Tombol fitur dikecilkan: sejajar & seukuran tab "Cari via ..."
+   ========================================================================== */
+.yz-features { gap: 8px; margin: 0 0 10px; }
+.yz-features .yz-feature { position: relative; flex-direction: row; justify-content: center; gap: 7px; min-height: 40px; padding: 6px 8px; border-radius: 12px; text-align: left; }
+.yz-features .yz-feature-ico { flex: 0 0 26px; width: 26px; height: 20px; }
+.yz-features .yz-feature-txt { flex: 0 1 auto; min-width: 0; align-items: flex-start; }
+.yz-features .yz-feature-txt b { font-size: 12px; line-height: 1.15; white-space: nowrap; }
+.yz-features .yz-soon-badge { position: absolute; top: -7px; right: 9px; padding: 1px 6px; font-size: 8px; letter-spacing: .05em; line-height: 1.5; text-transform: uppercase; }
+.yz-features .yz-feature:hover { transform: translateY(-1px); }
+.yz-features .yz-soon-badge { position: static; top: auto; right: auto; margin-top: 3px; padding: 0 6px; font-size: 7.5px; line-height: 1.6; letter-spacing: .06em; }
+.yz-features .yz-feature { justify-content: flex-start; padding-left: 12px; }
+/* final: tinggi tile = tinggi tab (44px) */
+.yz-features .yz-feature { height: 44px; min-height: 0; padding: 0 10px; box-sizing: border-box; }
+.yz-features .yz-feature-txt { gap: 2px; line-height: 1; }
+.yz-features .yz-feature-txt b { font-size: 12px; line-height: 1.1; }
+.yz-features .yz-soon-badge { margin: 0; padding: 0 6px; font-size: 7px; line-height: 1.6; animation: none; box-shadow: none; }
