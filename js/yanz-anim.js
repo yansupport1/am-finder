@@ -35,6 +35,11 @@
     setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 1400);
   }
 
+  function iframeHTML(src) {
+    return '<iframe src="' + src + '" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" ' +
+      'allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="Video"></iframe>';
+  }
+
   function embedHTML(vid) {
     return '<iframe src="https://www.tiktok.com/embed/v2/' + vid + '" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" ' +
       'allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="Video TikTok"></iframe>';
@@ -93,16 +98,19 @@
   }
 
   function buildEmbedHost() {
+    var plat = window.__yanzPlatform || "TikTok";
     var vid = currentVideoId();
-    var host = document.createElement("div");
+    var src = window.__yanzEmbed || (plat === "TikTok" && vid ? "https://www.tiktok.com/embed/v2/" + vid : "");
     var link = String(window.__yanzLastUrl || (document.getElementById("tt") || {}).value || "https://www.tiktok.com/").replace(/"/g, "");
-    if (vid) {
+    if (!src && plat !== "TikTok") return null;      // situs lain tanpa pemutar embed: biarkan tampilan bawaan
+    var host = document.createElement("div");
+    if (src) {
       host.className = "yz-embed";
-      host.innerHTML = embedHTML(vid);
+      host.innerHTML = iframeHTML(src);
       var wrap = document.createElement("div");
       wrap.appendChild(host);
       var a = document.createElement("a");
-      a.className = "yz-embed-link"; a.target = "_blank"; a.rel = "noopener"; a.href = link; a.textContent = "Buka di TikTok";
+      a.className = "yz-embed-link"; a.target = "_blank"; a.rel = "noopener"; a.href = link; a.textContent = "Buka link asli";
       wrap.appendChild(a);
       return wrap;
     }
@@ -115,6 +123,7 @@
     if (!v || v.getAttribute("data-yz-embed")) return;
     v.setAttribute("data-yz-embed", "1");
     var host = buildEmbedHost();
+    if (!host) return;
     var wrap = v.parentElement;
     if (wrap && !wrap.classList.contains("content-head") && wrap.tagName !== "MAIN") {
       wrap.style.display = "none";
@@ -136,6 +145,7 @@
     var good = v && (v.currentSrc || v.getAttribute("src")) && !v.error && v.readyState >= 1;
     if (good) return;
     var host = buildEmbedHost();
+    if (!host) return;
     var preview = head.querySelector(".video-preview");
     if (preview) preview.style.display = "none";
     if (v) v.setAttribute("data-yz-embed", "1");
@@ -221,7 +231,21 @@
     Array.prototype.forEach.call(main.querySelectorAll("video"), watchVideo);
   }
 
-  function boot() { setupReveal(); observeMain(); }
+  // Kolom link bawaan bertipe "url": browser menolak teks hasil Bagikan TikTok ("Lihat video ... https://vt...").
+  // Ubah ke teks biasa; server mengambil link-nya sendiri dari teks tersebut.
+  function fixUrlInput() {
+    var tt = document.getElementById("tt");
+    if (!tt) return;
+    if (tt.type === "url") { try { tt.type = "text"; } catch (e) {} }
+    tt.setAttribute("inputmode", "url");
+    tt.setAttribute("autocapitalize", "off");
+    tt.setAttribute("spellcheck", "false");
+    var f = tt.form || (tt.closest && tt.closest("form"));
+    if (f) f.noValidate = true;
+  }
+  document.addEventListener("focusin", fixUrlInput);
+
+  function boot() { setupReveal(); observeMain(); fixUrlInput(); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
   setTimeout(boot, 500); setTimeout(boot, 1500); setTimeout(boot, 3500);
 })();

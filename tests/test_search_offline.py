@@ -93,7 +93,10 @@ class T(unittest.TestCase):
         self.assertEqual((r["status"], r["count"], r["blocked"]), ("blocked", 0, True))
         self.assertIn("Cari via Link Video", r["message"])
         self.assertNotIn("tidak ada preset", r["message"].lower())
-        # begitu pulih, request berikutnya langsung berhasil (tidak ada cache kosong yang menempel)
+        # setelah masa istirahat mesin (45 dtk) lewat dan sumber pulih, pencarian berikutnya langsung berhasil
+        # (tidak ada cache kosong yang menempel)
+        for k in list(S._ENGINE_COOL):
+            S._ENGINE_COOL[k] = 0
         S.fetch = Env(lambda url, kw: S.Resp(200, page("https://www.tiktok.com/@zed/video/" + VID1), url, None) if "bing" in url else S.Resp(429, "", url, None))
         r2 = S.run_search("negoro angin")
         self.assertEqual(r2["status"], "ok")

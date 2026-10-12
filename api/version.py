@@ -3,8 +3,8 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 
-VERSION = "3.3"
-BUILD = "2026-10-11"
+VERSION = "3.4"
+BUILD = "2026-10-12"
 
 
 class handler(BaseHTTPRequestHandler):

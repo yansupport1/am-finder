@@ -6,15 +6,18 @@ SSE event "result" with JSON { ok, presetLinks, video, author, ... }
 
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote, quote
+import ipaddress
 import json
 import os
 import re
+import socket
 import threading
 import time
 import traceback
 
+from html import unescape as _html_unescape
 try:
-    from urllib.request import Request, urlopen
+    from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
     from urllib.error import HTTPError, URLError
 except ImportError:
     pass
@@ -67,6 +70,57 @@ FIND_BUDGET = float(os.environ.get("FIND_BUDGET", "60"))
 _tl = threading.local()   # per-thread: aman bila beberapa request jalan bersamaan di satu instance
 
 
+# ---------------------------------------------------------------------------
+# Keamanan: server hanya boleh mengambil alamat PUBLIK (bukan localhost / jaringan internal),
+# termasuk setiap lompatan redirect. Validasi lama hanya mencari teks "tiktok.com" di mana saja
+# di URL, sehingga alamat internal yang menyelipkan kata itu bisa lolos.
+# ---------------------------------------------------------------------------
+def is_public_host(host):
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            if not ipaddress.ip_address(info[4][0].split("%")[0]).is_global:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def safe_public_url(url):
+    try:
+        p = urlparse(url)
+    except Exception:
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    if p.username or p.password:
+        return False
+    try:
+        if p.port not in (None, 80, 443):
+            return False
+    except ValueError:
+        return False
+    h = p.hostname.lower()
+    if h == "localhost" or h.endswith((".local", ".internal", ".localhost")):
+        return False
+    return is_public_host(h)
+
+
+class _SafeRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not safe_public_url(newurl):
+            raise HTTPError(newurl, code, "redirect ke alamat non-publik diblokir", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+SAFE_OPENER = build_opener(_SafeRedirect)
+
+
 def _remaining():
     d = getattr(_tl, "deadline", None)
     return None if d is None else d - time.time()
@@ -89,7 +143,7 @@ def http_get(url, timeout=18, method="GET"):
         },
         method=method,
     )
-    with urlopen(req, timeout=timeout) as resp:
+    with SAFE_OPENER.open(req, timeout=timeout) as resp:
         final = resp.geturl()
         chunks, size = [], 0
         while True:
@@ -181,11 +235,12 @@ def resolve_url(url):
 
 
 def parse_video_id(url):
-    m = re.search(r"/video/(\d+)", url)
-    if m:
-        return m.group(1)
-    m = re.search(r"[?&]id=(\d+)", url)
-    return m.group(1) if m else None
+    for pat in (r"/(?:video|photo)/(\d+)", r"/v/(\d+)", r"/embed/v2/(\d+)", r"/embed/(\d+)",
+                r"[?&](?:id|item_id|share_item_id)=(\d+)"):
+        m = re.search(pat, url)
+        if m:
+            return m.group(1)
+    return None
 
 
 def parse_username(url):
@@ -522,6 +577,156 @@ def scrape_tiktok(url):
     }
 
 
+# ---------------------------------------------------------------------------
+# Normalisasi input: terima link TikTok bentuk apa pun + situs lain
+# ---------------------------------------------------------------------------
+_TT_HOST = re.compile(r"(^|\.)tiktok\.com$", re.I)
+_TT_ANY = re.compile(r"(?:https?://)?(?:[\w-]+\.)*tiktok\.com/[^\s\"'<>]*", re.I)
+
+
+def normalize_input(raw):
+    """Return (url, kind) dengan kind 'tiktok' | 'generic', atau (None, None) bila bukan link."""
+    t = (raw or "").strip()
+    if re.fullmatch(r"\d{15,25}", t):                       # hanya ID video
+        return "https://www.tiktok.com/@_/video/" + t, "tiktok"
+
+    def host_of(u):
+        try:
+            return (urlparse(u).hostname or "").lower()
+        except Exception:
+            return ""
+
+    cand = None
+    full = [u.rstrip(".,);]'\"") for u in re.findall(r"https?://[^\s\"'<>]+", t, re.I)]
+    for u in full:                                          # teks hasil Bagikan: utamakan link TikTok
+        if _TT_HOST.search(host_of(u)):
+            cand = u
+            break
+    if not cand and full:
+        cand = full[0]
+    if not cand:                                            # link TikTok tanpa https://
+        m = re.search(r"(?<![\w.-])(?:[\w-]+\.)*tiktok\.com/[^\s\"'<>]*", t, re.I)
+        if m:
+            cand = "https://" + m.group(0).rstrip(".,);]'\"")
+    if not cand:                                            # domain lain tanpa https://
+        m = re.search(r"(?<![\w.@-])(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*", t, re.I)
+        if m:
+            cand = "https://" + m.group(0).rstrip(".,);]'\"")
+    if not cand:
+        return None, None
+    host = host_of(cand)
+    if not host:
+        return None, None
+    return cand, ("tiktok" if _TT_HOST.search(host) else "generic")
+
+
+PLATFORMS = (
+    ("youtube.com", "YouTube"), ("youtu.be", "YouTube"), ("instagram.com", "Instagram"),
+    ("facebook.com", "Facebook"), ("fb.watch", "Facebook"), ("twitter.com", "X"), ("x.com", "X"),
+    ("threads.net", "Threads"), ("pinterest.", "Pinterest"), ("t.me", "Telegram"),
+    ("likee.video", "Likee"), ("snapchat.com", "Snapchat"), ("kwai", "Kwai"), ("reddit.com", "Reddit"),
+    ("linktr.ee", "Linktree"), ("lynk.id", "Lynk"), ("bio.link", "Bio.link"), ("beacons.ai", "Beacons"),
+)
+
+
+def platform_name(host):
+    h = (host or "").lower()
+    for key, name in PLATFORMS:
+        if key in h:
+            return name
+    return h.replace("www.", "") or "Web"
+
+
+def _meta(html, *names):
+    for n in names:
+        for pat in (r'<meta[^>]+(?:property|name)=["\']%s["\'][^>]*content=["\']([^"\']*)["\']' % re.escape(n),
+                    r'<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']%s["\']' % re.escape(n)):
+            m = re.search(pat, html, re.I)
+            if m and m.group(1).strip():
+                return _html_unescape(m.group(1)).strip()
+    return ""
+
+
+def _youtube_id(url):
+    for pat in (r"[?&]v=([\w-]{6,})", r"youtu\.be/([\w-]{6,})", r"/(?:shorts|embed|live)/([\w-]{6,})"):
+        m = re.search(pat, url)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def scrape_generic(url):
+    """Pindai halaman publik mana pun (YouTube, Instagram, Facebook, Linktree, blog, ...) untuk link preset."""
+    found, seen = [], set()
+
+    def add(urls, context):
+        for u in urls:
+            try:
+                host = urlparse(u).netloc.lower()
+            except Exception:
+                host = ""
+            if u in seen or not host:
+                continue
+            if any(x in host for x in ("bit.ly", "t.co", "tinyurl", "cutt.ly", "s.id")) and not PRESET_HINT.search(context or ""):
+                continue
+            seen.add(u)
+            found.append(classify(u, context))
+
+    final_url, html, _ = http_get(url, timeout=18)
+    host = (urlparse(final_url).hostname or "").lower()
+    plat = platform_name(host)
+    # buka escape JSON/HTML supaya link di dalam skrip data (mis. YouTube) ikut terbaca
+    norm = _html_unescape(html).replace("\\u0026", "&").replace("\\u003d", "=").replace("\\u002F", "/").replace("\\/", "/")
+
+    title = _meta(html, "og:title", "twitter:title")
+    if not title:
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        title = _html_unescape(m.group(1)).strip() if m else ""
+    desc = _meta(html, "og:description", "description", "twitter:description")
+    cover = _meta(html, "og:image", "twitter:image")
+    author = _meta(html, "author", "article:author", "twitter:creator") or ""
+    yt_desc = ""
+    m = re.search(r'"shortDescription":"((?:[^"\\]|\\.)*)"', html)
+    if m:
+        try:
+            yt_desc = json.loads('"' + m.group(1) + '"')
+        except Exception:
+            yt_desc = ""
+    m = re.search(r'"ownerChannelName":"((?:[^"\\]|\\.)*)"', html)
+    if m:
+        try:
+            author = json.loads('"' + m.group(1) + '"') or author
+        except Exception:
+            pass
+    description = (yt_desc or desc or title or "").strip()
+
+    add(extract_urls(yt_desc), "video caption / description")
+    add([u for u in extract_all_http(yt_desc) if is_preset_host(u)], "video caption / description")
+    add(extract_urls(desc), "video caption / description")
+    add([u for u in extract_all_http(desc) if is_preset_host(u)], "video caption / description")
+    add(extract_urls(norm), "page html")
+    add([u for u in extract_all_http(norm) if is_preset_host(u) and "tiktok.com" not in u], "page html")
+
+    yt = _youtube_id(final_url) if plat == "YouTube" else ""
+    return {
+        "ok": True,
+        "presetLinks": found,
+        "author": (("@" + author.lstrip("@")) if author else plat),
+        "authorDetail": {},
+        "platform": plat,
+        "video": {
+            "description": description[:2000],
+            "cover": cover or "",
+            "playUrl": "", "playUrlNoWm": "",
+            "id": yt, "embedUrl": ("https://www.youtube.com/embed/" + yt) if yt else "",
+            "width": 576, "height": 1024,
+            "stats": {"views": None, "likes": None, "comments": None},
+        },
+        "sourceUrl": final_url,
+        "videoId": yt,
+    }
+
+
 def sse(event, data):
     payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
     return f"event: {event}\ndata: {payload}\n\n"
@@ -549,7 +754,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache, no-transform")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")   # tanpa Content-Length: koneksi harus ditutup setelah stream selesai
         self.send_header("X-Accel-Buffering", "no")
         self._cors()
         self.end_headers()
@@ -558,16 +763,22 @@ class handler(BaseHTTPRequestHandler):
             if not url or len(url) < 8:
                 self.wfile.write(sse("result", {"ok": False, "error": "Missing url parameter"}).encode())
                 return
-            if not re.search(r"tiktok\.com|vt\.tiktok|vm\.tiktok", url, re.I):
-                self.wfile.write(
-                    sse("result", {"ok": False, "error": "Please paste a valid TikTok video link"}).encode()
-                )
+            norm_url, kind = normalize_input(url)
+            if not norm_url:
+                self.wfile.write(sse("result", {"ok": False, "error": "Please paste a valid video or page link (TikTok, YouTube, Instagram, ...)"}).encode())
+                return
+            if not safe_public_url(norm_url):
+                self.wfile.write(sse("result", {"ok": False, "error": "That address cannot be opened (not a public website)"}).encode())
                 return
 
             _tl.deadline = time.time() + FIND_BUDGET
-            result = scrape_tiktok(url)
+            result = scrape_tiktok(norm_url) if kind == "tiktok" else scrape_generic(norm_url)
+            if kind == "tiktok":
+                result.setdefault("platform", "TikTok")
             self.wfile.write(sse("result", result).encode())
         except Exception as e:
             traceback.print_exc()
             msg = str(e)[:180] or "scraper failed"
             self.wfile.write(sse("result", {"ok": False, "error": msg}).encode())
+        finally:
+            self.close_connection = True

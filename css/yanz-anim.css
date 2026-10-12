@@ -262,3 +262,106 @@ body.mode-caption .yanz-searching.is-show .yz-dots { display: inline-flex !impor
 .yz-features .yz-feature-txt { gap: 2px; line-height: 1; }
 .yz-features .yz-feature-txt b { font-size: 12px; line-height: 1.1; }
 .yz-features .yz-soon-badge { margin: 0; padding: 0 6px; font-size: 7px; line-height: 1.6; animation: none; box-shadow: none; }
+
+/* ==========================================================================
+   v3.4 - tombol fitur dirapikan (gaya sama dengan tab), Support Admin + QR,
+   chart lagu global, sheet "link pendek", tombol kartu
+   ========================================================================== */
+@keyframes yzEq { 0%,100% { height: 3px; } 50% { height: 14px; } }
+@keyframes yzSkel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes yzSupport { 0%,100% { box-shadow: 0 0 0 0 rgba(251,191,36,.35); } 50% { box-shadow: 0 0 0 7px rgba(251,191,36,0); } }
+@keyframes yzNow { 0%,100% { box-shadow: 0 0 0 0 rgba(94,234,212,.55); } 50% { box-shadow: 0 0 0 6px rgba(94,234,212,0); } }
+
+/* --- dua tombol fitur: satu wadah kaca seperti tab, isi tengah & seragam --- */
+.yz-features { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; margin: 0 0 10px; padding: 4px; box-sizing: border-box;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; }
+#yanzFeatureTrace, #yanzFeaturePremium { position: relative; display: flex !important; flex-direction: row !important; align-items: center; justify-content: center !important;
+  gap: 8px; height: 44px !important; min-height: 44px !important; padding: 0 6px !important; margin: 0 !important; border: 0 !important; border-radius: 11px !important;
+  background: transparent !important; box-shadow: none !important; color: rgba(255,255,255,.88); text-align: left; transform: none; }
+#yanzFeatureTrace:hover, #yanzFeaturePremium:hover { background: rgba(255,255,255,.08) !important; transform: none; }
+#yanzFeatureTrace:active, #yanzFeaturePremium:active { background: rgba(255,255,255,.13) !important; transform: scale(.98); }
+#yanzFeaturePremium::before { content: ""; position: absolute; left: -4px; top: 10px; bottom: 10px; width: 1px; background: rgba(255,255,255,.14); }
+.yz-features .yz-feature-ico { flex: 0 0 22px; width: 22px; height: 18px; }
+.yz-features .yz-feature-txt { align-items: flex-start; gap: 1px; }
+.yz-features .yz-feature-txt b { font-size: 11.5px; font-weight: 700; line-height: 1.15; }
+.yz-features .yz-soon-badge { background: none !important; color: #fbbf24 !important; padding: 0 !important; margin: 0 !important; font-size: 7.5px !important;
+  font-weight: 800; letter-spacing: .12em; line-height: 1.4; text-transform: uppercase; animation: none !important; box-shadow: none !important; }
+
+/* tag di popup: versi terkunci */
+.yz-soon-tag.is-lock { color: #1c1400; background: linear-gradient(135deg, #fde68a, #f59e0b); }
+
+/* --- tombol Support Admin --- */
+.yz-support-btn { display: block; width: 100%; min-height: 44px; margin-top: 10px; padding: 0 12px; border: 1px solid rgba(251,191,36,.7); border-radius: 12px;
+  background: rgba(251,191,36,.1); color: #fde68a; font-size: 13px; font-weight: 800; cursor: pointer; animation: yzSupport 2.4s ease-in-out infinite; transition: background .2s, transform .2s; }
+.yz-support-btn:hover { background: rgba(251,191,36,.18); }
+.yz-support-btn:active { transform: scale(.98); }
+
+/* --- popup QR --- */
+.yz-qr { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center; padding: 18px;
+  background: rgba(5,7,12,.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; visibility: hidden; transition: opacity .3s, visibility .3s; }
+.yz-qr.is-show { opacity: 1; visibility: visible; }
+.yz-qr-card { width: 100%; max-width: 340px; padding: 16px; text-align: center; border-radius: 22px; border: 1px solid rgba(251,191,36,.4);
+  background: linear-gradient(160deg, rgba(20,28,40,.97), rgba(8,12,20,.97)); box-shadow: 0 30px 80px -20px rgba(0,0,0,.8), 0 0 40px rgba(251,191,36,.14); transform: scale(.85); }
+.yz-qr.is-show .yz-qr-card { animation: yzPop .5s both; }
+.yz-qr-title { font-size: 18px; font-weight: 800; color: #fff; }
+.yz-qr-sub { margin: 3px 0 10px; font-size: 12.5px; color: #fde68a; font-weight: 700; }
+.yz-qr-frame { border-radius: 14px; overflow: hidden; background: #fff; max-height: 52vh; display: flex; align-items: center; justify-content: center; }
+.yz-qr-frame img { display: block; width: 100%; height: auto; max-height: 52vh; object-fit: contain; }
+.yz-qr-note { margin: 10px 0 12px; font-size: 12px; color: var(--muted, #94a3b8); }
+.yz-qr .yz-soon-actions { display: flex; gap: 8px; }
+.yz-qr .yz-soon-btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* --- tombol di kartu hasil --- */
+.yz-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.yz-card-actions .yanz-pick-btn { margin-top: 0; }
+.yz-short-btn { padding: 10px 12px; border: 1px solid rgba(94,234,212,.55); border-radius: 10px; background: transparent; color: #5eead4; font-size: 12.5px; font-weight: 800; cursor: pointer; transition: background .2s, transform .2s; }
+.yz-short-btn:hover { background: rgba(94,234,212,.1); }
+.yz-short-btn:active { transform: scale(.97); }
+
+/* --- chart lagu global --- */
+.yz-trend { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); animation: yzFadeUp .6s both; }
+.yz-trend-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #fff; }
+.yz-eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+.yz-eq i { width: 3px; height: 3px; background: #5eead4; border-radius: 2px; animation: yzEq 1s ease-in-out infinite; }
+.yz-eq i:nth-child(2) { animation-delay: .2s; } .yz-eq i:nth-child(3) { animation-delay: .4s; } .yz-eq i:nth-child(4) { animation-delay: .6s; }
+.yz-trend-sub { margin: 3px 0 10px; font-size: 11.5px; color: var(--muted, #94a3b8); }
+.yz-trend-list { display: grid; gap: 6px; }
+.yz-trend-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.04);
+  color: inherit; text-align: left; cursor: pointer; animation: yzSlideIn .45s both; transition: transform .2s, border-color .2s, background .2s; }
+.yz-trend-item:hover { border-color: rgba(94,234,212,.6); background: rgba(94,234,212,.07); transform: translateX(2px); }
+.yz-trend-item:active { transform: scale(.985); }
+.yz-rank { flex: 0 0 22px; text-align: center; font-size: 13px; font-weight: 900; color: #5eead4; }
+.yz-trend-item:nth-child(-n+3) .yz-rank { color: #fbbf24; }
+.yz-trend-cov { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 8px; object-fit: cover; background: #111; }
+.yz-trend-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.yz-trend-txt b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yz-trend-txt small { font-size: 11px; color: var(--muted, #94a3b8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yz-go { flex: 0 0 8px; width: 8px; height: 8px; border-right: 2px solid #5eead4; border-top: 2px solid #5eead4; transform: rotate(45deg); }
+.yz-skel { height: 54px; border-radius: 12px; background: linear-gradient(90deg, rgba(255,255,255,.05), rgba(255,255,255,.13), rgba(255,255,255,.05)); background-size: 200% 100%; animation: yzSkel 1.2s linear infinite; }
+.yz-trend-more, .yz-trend-retry { margin-top: 8px; width: 100%; min-height: 38px; border: 1px dashed rgba(94,234,212,.5); border-radius: 10px; background: transparent; color: #5eead4; font-size: 12px; font-weight: 800; cursor: pointer; }
+.yz-trend-err { font-size: 12.5px; color: var(--muted, #94a3b8); text-align: center; padding: 6px 0; }
+.yz-trend-err .yz-trend-retry { margin-top: 8px; }
+
+/* --- sheet "Ambil link pendek" --- */
+.yz-sheet { position: fixed; inset: 0; z-index: 2147483100; display: flex; align-items: flex-end; justify-content: center; background: rgba(5,7,12,.7);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; visibility: hidden; transition: opacity .3s, visibility .3s; }
+.yz-sheet.is-show { opacity: 1; visibility: visible; }
+.yz-sheet-card { width: 100%; max-width: 480px; padding: 12px 16px 20px; border-radius: 22px 22px 0 0; border: 1px solid rgba(94,234,212,.3); border-bottom: 0;
+  background: linear-gradient(160deg, #141c28, #080c14); transform: translateY(100%); transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.yz-sheet.is-show .yz-sheet-card { transform: none; }
+.yz-sheet-grab { width: 42px; height: 4px; margin: 0 auto 12px; border-radius: 4px; background: rgba(255,255,255,.2); }
+.yz-sheet-title { font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 10px; }
+.yz-sheet-steps { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.yz-sheet-steps li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted, #94a3b8); }
+.yz-sheet-steps li b { color: #fff; }
+.yz-sheet-steps i { flex: 0 0 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; font-style: normal; font-size: 12px; font-weight: 800; border: 1px solid rgba(255,255,255,.25); }
+.yz-sheet-steps li.is-done i { background: #5eead4; border-color: #5eead4; color: #020617; }
+.yz-sheet-steps li.is-now { color: #fff; }
+.yz-sheet-steps li.is-now i { border-color: #5eead4; color: #5eead4; animation: yzNow 1.6s ease-in-out infinite; }
+.yz-sheet-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px; background: rgba(94,234,212,.08); border: 1px solid rgba(94,234,212,.25); font-size: 12.5px; color: #d7fff8; }
+.yz-sheet-status .yz-dots { margin: 0; }
+.yz-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.yz-sheet-btn { display: flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 8px; border: 0; border-radius: 11px; text-decoration: none; text-align: center;
+  font-size: 12.5px; font-weight: 800; cursor: pointer; color: #020617; background: linear-gradient(135deg, #5eead4, #38bdf8); }
+.yz-sheet-btn.yz-sheet-alt { color: #5eead4; background: transparent; border: 1px solid rgba(94,234,212,.55); }
+.yz-sheet-btn.yz-sheet-cancel { color: #cbd5e1; background: rgba(255,255,255,.08); }
