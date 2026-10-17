@@ -1,0 +1,196 @@
+/* ==========================================================================
+   AM Finder - Liquid Glass v4 (c) 2026 Yanz. Seluruh hak dilindungi.
+   Material kaca cair: blur + saturasi, kilau tepi, bayangan dalam, lensa yang bergeser,
+   gerak pegas. Hanya transform/opacity yang dianimasikan agar ringan di HP.
+   ========================================================================== */
+:root {
+  --yz-ease: cubic-bezier(.22, 1, .36, 1);
+  --yz-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --g-a: rgba(255,255,255,.17);
+  --g-b: rgba(255,255,255,.045);
+  --g-line: rgba(255,255,255,.26);
+  --g-text: #f4f8ff;
+  --g-mute: rgba(226,236,255,.64);
+  --g-teal: 94,234,212;
+  --g-blue: 56,189,248;
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root { --yz-spring: linear(0, 0.0801 2.9%, 0.2696 5.9%, 0.5016 8.8%, 0.7267 11.8%, 0.9136 14.7%, 1.0478 17.6%, 1.1278 20.6%, 1.1606 23.5%, 1.1579 26.5%, 1.1325 29.4%, 1.0963 32.4%, 1.0584 35.3%, 1.025 38.2%, 0.9997 41.2%, 0.9833 44.1%, 0.9751 47.1%, 0.9735 50%, 0.9765 52.9%, 0.9819 55.9%, 0.9881 58.8%, 0.9939 61.8%, 0.9986 64.7%, 1.0019 67.6%, 1.0037 70.6%, 1.0043 73.5%, 1.0041 76.5%, 1.0033 79.4%, 1.0023 82.4%, 1.0013 85.3%, 1.0005 88.2%, 0.9999 91.2%, 0.9995 94.1%, 0.9993 97.1%, 1); }
+}
+
+/* ---------- latar: gumpalan warna yang melayang di belakang kaca ---------- */
+html { background: #05070d; }
+body::before, body::after { display: none !important; }
+#yzBg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; }
+.yz-blob { position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%; will-change: transform; opacity: .6; }
+.yz-blob.b1 { left: -26vmax; top: -20vmax; background: radial-gradient(circle, rgba(94,234,212,.55), transparent 62%); animation: yzB1 26s ease-in-out infinite alternate; }
+.yz-blob.b2 { right: -30vmax; top: 6vmax; background: radial-gradient(circle, rgba(56,189,248,.5), transparent 62%); animation: yzB2 31s ease-in-out infinite alternate; }
+.yz-blob.b3 { left: -12vmax; bottom: -32vmax; background: radial-gradient(circle, rgba(167,139,250,.5), transparent 62%); animation: yzB3 36s ease-in-out infinite alternate; }
+.yz-blob.b4 { right: -16vmax; bottom: -28vmax; background: radial-gradient(circle, rgba(244,114,182,.38), transparent 62%); animation: yzB4 29s ease-in-out infinite alternate; }
+@keyframes yzB1 { to { transform: translate3d(16vmax, 12vmax, 0) scale(1.14); } }
+@keyframes yzB2 { to { transform: translate3d(-14vmax, 16vmax, 0) scale(.9); } }
+@keyframes yzB3 { to { transform: translate3d(18vmax, -12vmax, 0) scale(1.1); } }
+@keyframes yzB4 { to { transform: translate3d(-16vmax, -14vmax, 0) scale(1.18); } }
+.shell, .site-header, .site-footer { position: relative; z-index: 1; }
+
+/* ---------- material kaca ---------- */
+.yz-glass {
+  position: relative; isolation: isolate;
+  background: linear-gradient(135deg, var(--g-a), var(--g-b));
+  border: 1px solid var(--g-line);
+  -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -1px 0 rgba(255,255,255,.1), inset 0 0 26px rgba(255,255,255,.05), 0 14px 44px -14px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.25);
+}
+.yz-glass::before { /* kilau yang mengikuti jari / kursor */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 0; mix-blend-mode: screen;
+  background: radial-gradient(150px circle at var(--mx, 28%) var(--my, 0%), rgba(255,255,255,.24), transparent 62%);
+}
+.yz-glass::after { /* cahaya tepi */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 3;
+  background: linear-gradient(135deg, rgba(255,255,255,.75), rgba(255,255,255,0) 38%, rgba(255,255,255,0) 62%, rgba(255,255,255,.38));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .yz-glass { background: linear-gradient(135deg, rgba(40,52,72,.92), rgba(20,26,40,.92)); }
+}
+
+/* ---------- TAB BAR: Fitur utama / Tools ---------- */
+@keyframes yzNavIn { from { opacity: 0; transform: translateY(-18px) scale(.94); filter: blur(12px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes yzNewPulse { 0%,100% { box-shadow: 0 0 10px rgba(251,191,36,.45); } 50% { box-shadow: 0 0 18px rgba(251,191,36,.85); } }
+@keyframes yzNewShine { from { transform: translateX(-130%) skewX(-20deg); } to { transform: translateX(260%) skewX(-20deg); } }
+.yz-nav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); z-index: 40; width: calc(100% - 24px); max-width: 696px; margin: 12px auto 12px; padding: 6px; border-radius: 28px; display: grid; gap: 6px;
+  animation: yzNavIn .95s var(--yz-spring) both; }
+.yz-grps { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 22px; background: rgba(0,0,0,.26);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.5), inset 0 -1px 0 rgba(255,255,255,.1); z-index: 1; }
+.yz-grp { position: relative; z-index: 2; height: 40px; border: 0; background: transparent; color: var(--g-mute); font: inherit; font-size: 13px; font-weight: 800; letter-spacing: .01em;
+  border-radius: 19px; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: color .4s var(--yz-ease), transform .6s var(--yz-spring); }
+.yz-grp.is-on { color: #fff; text-shadow: 0 1px 10px rgba(94,234,212,.45); }
+.yz-grp:active { transform: scale(.93); }
+.yz-new { display: inline-block; position: relative; overflow: hidden; font-style: normal; font-size: 8.5px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; line-height: 1;
+  padding: 3px 7px; border-radius: 999px; color: #1c1400; background: linear-gradient(135deg, #fde68a, #f59e0b); animation: yzNewPulse 2.2s ease-in-out infinite; }
+.yz-new::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent); animation: yzNewShine 2.8s ease-in-out infinite; }
+
+/* lensa kaca cair yang bergeser */
+.yz-glens { position: absolute; left: 0; top: 0; z-index: 1; width: 0; height: 0; border-radius: 19px; pointer-events: none; opacity: 0; will-change: transform, width, height;
+  background: linear-gradient(180deg, rgba(255,255,255,.36), rgba(255,255,255,.1));
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.9), inset 0 -10px 18px rgba(255,255,255,.1), inset 0 0 0 1px rgba(255,255,255,.24), 0 10px 26px -6px rgba(0,0,0,.6), 0 0 24px rgba(94,234,212,.28);
+  -webkit-backdrop-filter: blur(5px) saturate(230%) brightness(1.2); backdrop-filter: blur(5px) saturate(230%) brightness(1.2); }
+.yz-glens::after { content: ""; position: absolute; top: 3px; left: 12%; right: 12%; height: 30%; border-radius: 999px; background: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0)); }
+.yz-glens-i { border-radius: 20px; }
+
+/* daftar: bertukar dengan geser + kabur + pegas */
+.yz-lists { display: grid; position: relative; z-index: 1; }
+.yz-list { grid-area: 1 / 1; position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateX(var(--dx, 26px)) scale(.94); filter: blur(10px);
+  transition: opacity .3s var(--yz-ease), transform .55s var(--yz-ease), filter .4s var(--yz-ease), visibility 0s .5s; }
+.yz-list.is-on { opacity: 1; visibility: visible; pointer-events: auto; transform: none; filter: blur(0);
+  transition: opacity .35s var(--yz-ease) .06s, transform .9s var(--yz-spring) .06s, filter .5s var(--yz-ease) .06s, visibility 0s; }
+.yz-nav[data-grp="main"] .yz-list[data-list="tools"] { --dx: 28px; }
+.yz-nav[data-grp="tools"] .yz-list[data-list="main"] { --dx: -28px; }
+.yz-list > .yz-item { opacity: 0; transform: translateY(10px) scale(.96); transition: opacity .3s var(--yz-ease), transform .5s var(--yz-ease), background .3s; }
+.yz-list.is-on > .yz-item { opacity: 1; transform: none; transition: opacity .4s var(--yz-ease) calc(.12s + var(--i, 0) * 70ms), transform .9s var(--yz-spring) calc(.12s + var(--i, 0) * 70ms), background .3s; }
+.yz-list.is-on > .yz-item:active { transform: scale(.94); transition-delay: 0s; transition-duration: .2s; }
+.yz-item { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px; border: 0; border-radius: 20px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--g-text); background: rgba(255,255,255,.05); -webkit-tap-highlight-color: transparent; overflow: hidden; }
+.yz-item::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(110px circle at var(--mx, 50%) var(--my, 0%), rgba(255,255,255,.26), transparent 65%); }
+.yz-item:hover::before, .yz-item:active::before { opacity: 1; }
+.yz-item.is-on { background: transparent; }
+.yz-ico { position: relative; flex: 0 0 28px; width: 28px; height: 28px; display: grid; place-items: center; color: #5eead4; }
+.yz-ico svg { width: 100%; height: 100%; overflow: visible; }
+.yz-item.is-on .yz-ico { color: #fff; filter: drop-shadow(0 0 8px rgba(94,234,212,.7)); }
+.yz-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.yz-txt b { font-size: 12.5px; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yz-txt small { font-size: 10.5px; color: var(--g-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yz-item .yz-new { position: absolute; top: -6px; right: 10px; z-index: 5; }
+.yz-item[data-soon] { overflow: visible; }
+
+/* ---------- komponen lain: kaca cair 100% ---------- */
+.yanz-slider { border-radius: 28px !important; overflow: hidden; position: relative; border: 1px solid rgba(255,255,255,.34) !important;
+  box-shadow: 0 26px 60px -24px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.65) !important; }
+.yanz-slider::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 4;
+  background: linear-gradient(160deg, rgba(255,255,255,.3), rgba(255,255,255,0) 30%, rgba(255,255,255,0) 72%, rgba(255,255,255,.14)); mix-blend-mode: soft-light; }
+
+.search-field { border-radius: 20px !important; background: linear-gradient(135deg, rgba(255,255,255,.13), rgba(255,255,255,.04)) !important; border: 1px solid var(--g-line) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(170%); backdrop-filter: blur(18px) saturate(170%);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.35), 0 10px 30px -14px rgba(0,0,0,.6) !important; transition: transform .7s var(--yz-spring), box-shadow .4s, border-color .3s; }
+.search-field:focus-within { transform: scale(1.012); border-color: rgba(94,234,212,.7) !important; box-shadow: inset 0 2px 6px rgba(0,0,0,.3), 0 0 0 4px rgba(94,234,212,.18), 0 14px 38px -12px rgba(94,234,212,.45) !important; }
+.search-input, .yanz-caption-input { background: transparent !important; box-shadow: none !important; }
+.yanz-caption-input { border: 1px solid var(--g-line) !important; border-radius: 18px !important; background: rgba(255,255,255,.07) !important; box-shadow: inset 0 2px 6px rgba(0,0,0,.3) !important; }
+
+.btn-primary, .yanz-caption-btn { position: relative; border: 1px solid rgba(255,255,255,.5) !important; border-radius: 20px !important; color: #031018 !important;
+  background: linear-gradient(180deg, rgba(150,255,236,.92), rgba(56,189,248,.82)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), inset 0 -10px 16px rgba(0,90,130,.22), 0 12px 30px -10px rgba(56,189,248,.75), 0 2px 6px rgba(0,0,0,.25) !important;
+  transition: transform .7s var(--yz-spring), box-shadow .3s, filter .3s !important; }
+.btn-primary::before, .yanz-caption-btn::before { content: ""; position: absolute; top: 2px; left: 10%; right: 10%; height: 42%; border-radius: 999px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,0)); }
+.btn-primary:active, .yanz-caption-btn:active { transform: scale(.94) !important; transition-duration: .15s !important; }
+
+.chips .chip, .yz-vt, .yz-short-btn, .yanz-pick-btn { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.chip { background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.04)) !important; border: 1px solid var(--g-line) !important; border-radius: 999px !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
+
+.how, .yanz-caption-box, .state, .video-meta, .run, .meta-item, .preset-section { position: relative; }
+.how, .yanz-caption-box { border-radius: 26px !important; border: 1px solid var(--g-line) !important; background: linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.035)) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -1px 0 rgba(255,255,255,.08), 0 18px 50px -18px rgba(0,0,0,.65) !important; }
+.how-num { background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.06)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 4px 12px rgba(0,0,0,.3); }
+.state, .video-meta, .run { border-radius: 22px !important; border: 1px solid var(--g-line) !important; background: linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.03)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 14px 38px -16px rgba(0,0,0,.6) !important; }
+.preset-row, .yanz-result, .yz-trend-item, .meta-item { border-radius: 20px !important; border: 1px solid rgba(255,255,255,.2) !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.035)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 10px 28px -14px rgba(0,0,0,.6) !important; }
+.preset-row, .yanz-result, .yz-trend-item { transition: transform .7s var(--yz-spring), border-color .3s, background .3s; }
+.preset-row:hover, .yanz-result:hover { transform: translateY(-2px); }
+.yz-trend { border-top-color: rgba(255,255,255,.14); }
+.yz-vt { background: rgba(255,255,255,.08); border-color: var(--g-line); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.yz-vt button.is-on { background: linear-gradient(180deg, rgba(150,255,236,.95), rgba(56,189,248,.85)); box-shadow: inset 0 1px 0 rgba(255,255,255,.8); }
+.yz-short-btn { background: rgba(94,234,212,.08); border-color: rgba(94,234,212,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+.yanz-pick-btn { border: 1px solid rgba(255,255,255,.45) !important; border-radius: 12px !important; color: #031018 !important;
+  background: linear-gradient(180deg, rgba(150,255,236,.92), rgba(56,189,248,.82)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 8px 20px -8px rgba(56,189,248,.7) !important; }
+
+.site-footer { background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)) !important; -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
+  border-top: 1px solid var(--g-line) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+
+/* modal, sheet, QR, overlay */
+.yz-soon, .yz-qr, .yz-sheet, .yanz-modal-overlay, .yanz-link-overlay { -webkit-backdrop-filter: blur(18px) saturate(140%) !important; backdrop-filter: blur(18px) saturate(140%) !important; background: rgba(4,8,16,.55) !important; }
+.yz-soon-card, .yz-qr-card, .yz-sheet-card, .yanz-modal-card, .yanz-link-card { border: 1px solid rgba(255,255,255,.3) !important; background: linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.05)) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(190%); backdrop-filter: blur(26px) saturate(190%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 -1px 0 rgba(255,255,255,.1), 0 30px 80px -20px rgba(0,0,0,.8) !important; }
+.yz-soon-btn, .yz-sheet-btn, .yanz-btn { border-radius: 14px !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.6); transition: transform .6s var(--yz-spring); }
+.yz-soon-btn:active, .yz-sheet-btn:active, .yanz-btn:active, .yz-support-btn:active { transform: scale(.94); }
+.yz-support-btn { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
+.yz-toast { background: linear-gradient(135deg, rgba(150,255,236,.9), rgba(56,189,248,.85)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 14px 36px -10px rgba(56,189,248,.7) !important; }
+.yanz-loader { background: radial-gradient(circle at 30% 20%, rgba(94,234,212,.22), transparent 55%), radial-gradient(circle at 80% 80%, rgba(167,139,250,.22), transparent 55%), #05070d !important; }
+.yanz-loader-logo { border-radius: 26px; box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 18px 50px -12px rgba(94,234,212,.45); }
+.yz-loadbar { background: rgba(255,255,255,.1); box-shadow: inset 0 1px 3px rgba(0,0,0,.5); }
+
+@media (prefers-reduced-motion: reduce) {
+  .yz-blob, .yz-new, .yz-new::after { animation: none !important; }
+  .yz-list, .yz-list.is-on, .yz-list > .yz-item, .yz-list.is-on > .yz-item { transition: opacity .01s !important; filter: none !important; transform: none !important; }
+}
+
+/* tombol Search tetap sejajar dengan kolom link (border baru menambah 2px lebar) */
+.search-form .search-field { flex: 1 1 200px !important; min-width: 0; }
+
+/* html & body sama-sama overflow-x:hidden membuat body menjadi "scroll container" sehingga position:sticky mati.
+   overflow-x:clip menahan limpahan horizontal tanpa membuat scroll container. */
+html, body { overflow-x: clip !important; }
+body { overflow-y: visible !important; }
+
+/* tab bar mengecil saat scroll turun. Tinggi di aliran dokumen dijaga TETAP (margin bawah menambal selisih)
+   supaya tidak ada loncatan tata letak / umpan balik scroll. Baris daftar melipat dengan transisi grid-template-rows. */
+.yz-nav { grid-template-rows: auto 1fr; margin-bottom: 12px;
+  transition: grid-template-rows .7s var(--yz-ease), gap .7s var(--yz-ease), padding .6s var(--yz-ease), margin-bottom .7s var(--yz-ease), border-radius .6s var(--yz-spring), box-shadow .5s; }
+.yz-lists { min-height: 0; transition: opacity .45s var(--yz-ease), filter .5s var(--yz-ease); }
+.yz-nav.is-compact { grid-template-rows: auto 0fr; gap: 0; padding: 4px; border-radius: 24px; margin-bottom: calc(12px + var(--yz-keep, 0px)); }
+.yz-nav.is-compact .yz-lists { overflow: hidden; opacity: 0; filter: blur(8px); pointer-events: none; }
+.yz-nav.is-compact .yz-grp { height: 34px; }
+
+/* html & body sama-sama overflow-x:hidden membuat body menjadi "scroll container" sehingga position:sticky mati.
+   overflow-x:clip menahan limpahan horizontal tanpa membuat scroll container. */
+html, body { overflow-x: clip !important; }
+body { overflow-y: visible !important; }
+
+
+/* animasi masuk tidak boleh meninggalkan transform pada pembungkus: elemen position:fixed di dalamnya
+   (video layar penuh, popup) akan "terjebak" di dalam pembungkus itu */
+.yz-enter { animation-fill-mode: backwards !important; }
